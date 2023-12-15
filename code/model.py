@@ -3,7 +3,6 @@ import torch.nn as nn
 import torch.utils.checkpoint as checkpoint
 
 from ifcnn import IFCNN
-from swinir import SwinIR
 
 def _rgb_to_L(tensor):
     # adapted from https://github.com/python-pillow/Pillow/blob/66c244af3233b1cc6cc2c424e9714420aca109ad/src/libImaging/Convert.c#L226
@@ -29,7 +28,7 @@ class FusionDenoiser(nn.Module):
         pretrained (bool): Whether to load pretrained weights for IFCNN and SwinIR
     """
     
-    def __init__(self, fuse_scheme=0, img_size=128, window_size=8, use_checkpoint=False,
+    def __init__(self, fuse_scheme=0, img_size=128, swin_version='V1', window_size=8, use_checkpoint=False,
                  depths=[6]*6, num_heads=[6]*6, embed_dim=180, mlp_ratio=2,
                  swinir_grayscale=True, pretrained=False):
         super(FusionDenoiser, self).__init__()
@@ -39,15 +38,25 @@ class FusionDenoiser(nn.Module):
         self.fusion = IFCNN(fuse_scheme=fuse_scheme)
         
         self.use_checkpoint = use_checkpoint
+        
+        self.swin_version = swin_version
+        if self.swin_version == 'V1':
+            from swinir import SwinIR as Swin
+        elif self.swin_version == 'V2':
+            from swin2sr import Swin2SR as Swin
+        
         # static arguments taken from https://github.com/cszn/KAIR/blob/master/options/swinir/train_swinir_denoising_gray.json lines 42-57
-        self.denoiser = SwinIR(img_size=img_size, window_size=window_size, use_checkpoint=use_checkpoint,
-                               depths=depths, num_heads=num_heads, embed_dim=embed_dim, mlp_ratio=mlp_ratio,
-                               upscale=1, in_chans=1 if self.swinir_grayscale else 3, img_range=255.0, upsampler=None, resi_connection="1conv")
+        self.denoiser = Swin(img_size=img_size, window_size=window_size, use_checkpoint=use_checkpoint,
+                             depths=depths, num_heads=num_heads, embed_dim=embed_dim, mlp_ratio=mlp_ratio,
+                             upscale=1, in_chans=1 if self.swinir_grayscale else 3, img_range=255.0, upsampler=None, resi_connection="1conv")
         
         self.pretrained = pretrained
         if self.pretrained:
             self.fusion.load_state_dict(torch.load('snapshots/IFCNN-MAX.pth'))
-            self.denoiser.load_state_dict(torch.load('snapshots/004_grayDN_DFWB_s128w8_SwinIR-M_noise15.pth')['params'])
+            if self.swin_version == 'V1' and self.swinir_grayscale:
+                self.denoiser.load_state_dict(torch.load('snapshots/004_grayDN_DFWB_s128w8_SwinIR-M_noise15.pth')['params'])
+            else:
+                print('No pretrained weights available for grayscale Swin', self.swin_version)
             
             self.register_buffer('fusion_mean', torch.tensor([0.485, 0.456, 0.406])[:, None, None])   # empty dimensions for braodcasting. add as constant to module
             self.register_buffer('fusion_std', torch.tensor([0.229, 0.224, 0.225])[:, None, None])    # Allows them to automatically move between devices with the module
@@ -57,7 +66,7 @@ class FusionDenoiser(nn.Module):
         if self.pretrained:
             # de-norm using the means and stds (probably) used during training
             # not sure if this is even needed
-            tensor = tensor.mul(self.fusion_std).add(self.fusion_mean)   #.clamp(0, 1) probably not needed
+            tensor = tensor.mul(self.fusion_std).add(self.fusion_mean)  # .clamp(0, 1)  probably not needed
         return _rgb_to_L(tensor)
         
     def forward(self, x):
