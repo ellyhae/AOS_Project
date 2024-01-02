@@ -4,15 +4,27 @@ import os
 import cv2
 from glob import glob
 
-def toTensor4d(inp):
+def toTensor(inp):
     '''adapt channel layout from (..., H, W, C) to (..., C, H, W) and convert to pytorch tensor'''
-    return torch.from_numpy(np.moveaxis(inp, -1, -3)).contiguous().div(256)                             # TODO: Consider if we want to normalize to [0,1] or just convert to float in range [0, 255]
+    return torch.from_numpy(np.moveaxis(inp, -1, -3)).contiguous()
 
 class FocalDataset(torch.utils.data.Dataset):
-    def __init__(self, path='./integrals', augment=False):
+    def __init__(self, path='./integrals', grayscale=False, augment=False, normalize=True, seed=42):
+        '''
+        Dataset class to load generated integral focal stacks
+        
+        path: path to directory filled with integral focal stacks and ground truths
+        grayscale: if True, return integrals and ground truths with a single color channel. If False, repeats that single channel three times for "rbg"
+        augment: randomly flip and rotate
+        normalize: If true values are in the range [0,1], else in [0, 255]
+        seed: random seed for augmentation
+        '''
         self.path = path
         self.num_files = len(glob(os.path.join(self.path, '*_integral.tiff')))
+        self.grayscale = grayscale
         self.augment = augment
+        self.normalize = normalize
+        self.rng = np.random.default_rng(seed)
         
     def __len__(self):
         return self.num_files
@@ -21,12 +33,34 @@ class FocalDataset(torch.utils.data.Dataset):
         ok, focal_stack = cv2.imreadmulti(os.path.join(self.path, f'{index}_integral.tiff'))
         if not ok:
             raise IOError(f'Failed to load index: {index}')
-        focal_stack = np.stack(focal_stack)
-        ground_truth = cv2.imread(os.path.join(self.path, f'{index}_gt.png'))
-        
-        focal_stack, ground_truth = toTensor4d(focal_stack), toTensor4d(ground_truth)
+            
+        focal_stack = np.stack(focal_stack)[...,None]   # shape (num_focal_lengths, w, h, 1)
+        ground_truth = cv2.imread(os.path.join(self.path, f'{index}_gt.png'))[...,[0]]   # shape (w, h, 1)
         
         if self.augment:
-            raise NotImplementedError
+            # augment the input and target images with random horizontal and vertical flips, and a random number of 90 degree rotations
+            
+            flip1, flip2 = self.rng.random(2)
+            if flip1 > 0.5:
+                focal_stack = np.flip(focal_stack, -2)
+                ground_truth = np.flip(ground_truth, -2)
+            if flip2 > 0.5:
+                focal_stack = np.flip(focal_stack, -3)
+                ground_truth = np.flip(ground_truth, -3)
+            
+            num_rot = self.rng.integers(4)
+            focal_stack = np.rot90(focal_stack, num_rot, (-3, -2))
+            ground_truth = np.rot90(ground_truth, num_rot, (-3, -2))
+            
+        if self.normalize:
+            focal_stack = focal_stack / 256
+            ground_truth = ground_truth / 256
+        else:
+            focal_stack = focal_stack.astype(float)
+            ground_truth = ground_truth.astype(float)
+            
+        if not self.grayscale:
+            focal_stack = np.repeat(focal_stack, 3, -1)
+            ground_truth = np.repeat(ground_truth, 3, -1)
         
-        return focal_stack, ground_truth
+        return toTensor(focal_stack), toTensor(ground_truth)
