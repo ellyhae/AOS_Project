@@ -9,7 +9,7 @@ def toTensor(inp):
     return torch.from_numpy(np.moveaxis(inp, -1, -3)).contiguous()
 
 class FocalDataset(torch.utils.data.Dataset):
-    def __init__(self, path='./integrals', grayscale=False, augment=False, normalize=True, seed=42):
+    def __init__(self, path='./integrals', input_channels=3, output_channels=3, augment=False, normalize=True, seed=42):
         '''
         Dataset class to load generated integral focal stacks
         
@@ -21,7 +21,8 @@ class FocalDataset(torch.utils.data.Dataset):
         '''
         self.path = path
         self.num_files = len(glob(os.path.join(self.path, '*_integral.tiff')))
-        self.grayscale = grayscale
+        self.input_channels = input_channels
+        self.output_channels = output_channels
         self.augment = augment
         self.normalize = normalize
         self.rng = np.random.default_rng(seed)
@@ -59,8 +60,7 @@ class FocalDataset(torch.utils.data.Dataset):
             focal_stack = focal_stack.astype(float)
             ground_truth = ground_truth.astype(float)
             
-        if not self.grayscale:
-            focal_stack = np.repeat(focal_stack, 3, -1)
-            ground_truth = np.repeat(ground_truth, 3, -1)
+        focal_stack = np.repeat(focal_stack, self.input_channels, -1)
+        ground_truth = np.repeat(ground_truth, self.output_channels, -1)
         
         return toTensor(focal_stack), toTensor(ground_truth)
