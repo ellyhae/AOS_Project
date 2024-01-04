@@ -28,7 +28,7 @@ class FusionDenoiser(nn.Module):
         pretrained (bool): Whether to load pretrained weights for IFCNN and SwinIR
     """
     
-    def __init__(self, fuse_scheme=0, img_size=128, swin_version='V1', window_size=8, use_checkpoint=False,
+    def __init__(self, fuse_scheme=0, img_size=512, swin_version='V1', window_size=8, use_checkpoint=False,
                  depths=[6]*6, num_heads=[6]*6, embed_dim=180, mlp_ratio=2,
                  swinir_grayscale=True, pretrained=False):
         super(FusionDenoiser, self).__init__()
