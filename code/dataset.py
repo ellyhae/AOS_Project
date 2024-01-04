@@ -6,7 +6,7 @@ from glob import glob
 
 def toTensor(inp):
     '''adapt channel layout from (..., H, W, C) to (..., C, H, W) and convert to pytorch tensor'''
-    return torch.from_numpy(np.moveaxis(inp, -1, -3)).contiguous()
+    return torch.from_numpy(np.moveaxis(inp, -1, -3)).contiguous().float()
 
 class FocalDataset(torch.utils.data.Dataset):
     def __init__(self, path='./integrals', input_channels=3, output_channels=3, augment=False, normalize=True, seed=42):
@@ -54,11 +54,8 @@ class FocalDataset(torch.utils.data.Dataset):
             ground_truth = np.rot90(ground_truth, num_rot, (-3, -2))
             
         if self.normalize:
-            focal_stack = focal_stack / 256
-            ground_truth = ground_truth / 256
-        else:
-            focal_stack = focal_stack.astype(float)
-            ground_truth = ground_truth.astype(float)
+            focal_stack = focal_stack / np.float32(256)
+            ground_truth = ground_truth / np.float32(256)
             
         focal_stack = np.repeat(focal_stack, self.input_channels, -1)
         ground_truth = np.repeat(ground_truth, self.output_channels, -1)
