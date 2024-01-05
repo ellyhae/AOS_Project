@@ -14,8 +14,8 @@ class FocalDataset(torch.utils.data.Dataset):
         '''
         Dataset class to load generated integral focal stacks
 
-        used_focal_lengths_idx: list with idx-values from 0-9 are allowed, O = focal-length with 0m, 1 = focal-length with 0.2m,
-            2 = 0.4m, 3 = 0.6m, 4 = 0.8m, ...
+        used_focal_lengths_idx: list with idx-values from 0-12 are allowed, O = focal-length with 0m, 1 = focal-length with 0.2m,
+            2 = 0.4m, 3 = 0.6m, 4 = 0.8m, ... 12 = 2.4m
 
         path: path to directory filled with integral focal stacks and ground truths
         grayscale: if True, return integrals and ground truths with a single color channel. If False, repeats that single channel three times for "rbg"
@@ -32,7 +32,7 @@ class FocalDataset(torch.utils.data.Dataset):
         self.rng = np.random.default_rng(seed)
 
         if used_focal_lengths_idx is None:
-            self.used_focal_lengths_idx = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+            self.used_focal_lengths_idx = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
         else:
             self.used_focal_lengths_idx = used_focal_lengths_idx
         
