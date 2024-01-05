@@ -22,9 +22,9 @@ class FusionDenoiser(nn.Module):
         pretrained (bool): Whether to load pretrained weights for IFCNN and SwinIR
     """
     
-    def __init__(self, fuse_scheme=0, img_size=512, swin_version='V1', window_size=8, use_checkpoint=False,
-                 depths=[6]*6, num_heads=[6]*6, embed_dim=180, mlp_ratio=2,
-                 use_rgb_to_L=True, swin_img_range=1., swin_in_chans=1):
+    def __init__(self, fuse_scheme=0, img_size=512, swin_version='V2', window_size=8, use_checkpoint=False,
+                 depths=[2, 2, 6, 2], num_heads=[6, 6, 6, 6], embed_dim=60, mlp_ratio=4,
+                 use_rgb_to_L=True, swin_img_range=1., swin_in_chans=1, swin_patch_size=4):
         super(FusionDenoiser, self).__init__()
         
         self.fusion = IFCNN(fuse_scheme=fuse_scheme)
@@ -37,7 +37,7 @@ class FusionDenoiser(nn.Module):
         elif self.swin_version == 'V2':
             from swin2sr import Swin2SR as Swin
         
-        # static arguments taken from https://github.com/cszn/KAIR/blob/master/options/swinir/train_swinir_denoising_gray.json lines 42-57
+        # static arguments taken from https://huggingface.co/docs/transformers/v4.27.0/model_doc/swinv2
         self.denoiser = Swin(img_size=img_size, window_size=window_size, use_checkpoint=use_checkpoint,
                              depths=depths, num_heads=num_heads, embed_dim=embed_dim, mlp_ratio=mlp_ratio,
                              upscale=1, in_chans=swin_in_chans, img_range=swin_img_range, upsampler=None, resi_connection="1conv")
