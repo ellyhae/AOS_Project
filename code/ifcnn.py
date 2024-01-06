@@ -1,76 +1,111 @@
 # Source: https://github.com/uzeful/IFCNN/blob/master/Code/model.py
-# Modified by: Ellena Pfleger
+# Modified by: Ellena, Nate
 
 '''---------------------------------------------------------------------------
 IFCNN: A General Image Fusion Framework Based on Convolutional Neural Network
 ----------------------------------------------------------------------------'''
 import torch
-import math
-import torch.nn as nn
-import torch.nn.functional as F
-import torchvision.models as models
+from torch import nn
+from torchvision import models
 
 
-# My Convolution Block
-class ConvBlock(nn.Module):
-    def __init__(self, inplane, outplane):
-        super(ConvBlock, self).__init__()
-        self.padding = (1, 1, 1, 1)
-        self.conv = nn.Conv2d(inplane, outplane, kernel_size=3, padding=0, stride=1, bias=False)
-        self.bn = nn.BatchNorm2d(outplane)
+class Conv2dBlock(nn.Module):
+    """Convolutional block applicable to image batches of size N×C×H×W"""
+
+    def __init__(self, in_channels: int, out_channels: int, *args, **kwargs):
+        super().__init__()
+        self.conv = nn.Conv2d(in_channels, out_channels, *args, **kwargs)
+        self.bn = nn.BatchNorm2d(out_channels)
         self.relu = nn.ReLU(inplace=True)
 
-    def forward(self, x):
-        out = F.pad(x, self.padding, 'replicate')
-        out = self.conv(out)
-        out = self.bn(out)
-        out = self.relu(out)
-        return out
+    def forward(self, x: torch.Tensor, /) -> torch.Tensor:
+        y = self.conv(x)
+        y = self.bn(y)
+        y = self.relu(y)
+        return y
 
-    
+
+class Fusor:
+    """Fusor applicable to image batches of size N×F×C×H×W"""
+
+    def __init__(self, fusion_mode: str = "max"):
+        self.fusion_mode = fusion_mode
+
+        match self.fusion_mode:
+            case "max":
+                self.fuse = Fusor.max
+            case "amax":
+                self.fuse = Fusor.amax
+            case "sum":
+                self.fuse = Fusor.sum
+            case "mean":
+                self.fuse = Fusor.mean
+            case _:
+                raise ValueError(f"Invalid fusion mode '{self.fusion_mode}'")
+
+    def __call__(self, x: torch.Tensor, /) -> torch.Tensor:
+        return self.fuse(x)
+
+    @staticmethod
+    def max(x: torch.Tensor, /) -> torch.Tensor:
+        # Propagate gradient selectively in case of equal values
+        return torch.max(x, 1).values
+
+    @staticmethod
+    def amax(x: torch.Tensor, /) -> torch.Tensor:
+        # Distribute gradient evenly in case of equal values
+        return torch.amax(x, 1)
+
+    @staticmethod
+    def sum(x: torch.Tensor, /) -> torch.Tensor:
+        return torch.sum(x, 1)
+
+    @staticmethod
+    def mean(x: torch.Tensor, /) -> torch.Tensor:
+        return torch.mean(x, 1)
+
+
 class IFCNN(nn.Module):
-    def __init__(self, fuse_scheme=0):
-        super(IFCNN, self).__init__()
-        self.fuse_scheme = fuse_scheme # MAX, MEAN, SUM
-        self.conv2 = ConvBlock(64, 64)
-        self.conv3 = ConvBlock(64, 64)
-        self.conv4 = nn.Conv2d(64, 3, kernel_size=1, padding=0, stride=1, bias=True)
+    """Image-fusion convolutional neural network applicable to image batches of size N×F×C×H×W"""
 
-        # Initialize parameters for other parameters
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-                m.weight.data.normal_(0, math.sqrt(2. / n))
+    def __init__(self, in_channels: int = 1, fusion_mode: str = "max", use_resnet: bool = True):
+        super().__init__()
+        self.in_channels = in_channels
+        self.fusion_mode = fusion_mode
+        self.use_resnet = use_resnet
 
-        # Initialize conv1 with the pretrained resnet101 and freeze its parameters
-        resnet = models.resnet101(weights=models.resnet.ResNet101_Weights.DEFAULT)
-        for p in resnet.parameters():
-            p.requires_grad = False
-        self.conv1 = resnet.conv1
-        self.conv1.stride = 1
-        self.conv1.padding = (0, 0)
+        self.extractor = nn.Sequential(
+            nn.Conv2d(self.in_channels, 64, 7, padding=3, padding_mode="replicate", bias=False),
+            Conv2dBlock(64, 64, 3, padding=1, padding_mode="replicate", bias=False)
+        )
+        self.fusor = Fusor(self.fusion_mode)
+        self.reconstructor = nn.Sequential(
+            Conv2dBlock(64, 64, 3, padding=1, padding_mode="replicate", bias=False),
+            nn.Conv2d(64, self.in_channels, 1)
+        )
+        self.apply(self.init_weight)
 
-    def forward(self, tensor):
-        # stacking the input changes the values slightly, seemingly due to floating point reasons
-        
-        # Feature extraction
-        outs = tensor.flatten(0, 1)
-        outs = F.pad(outs, (3, 3, 3, 3), mode='replicate')
-        outs = self.conv1(outs)
-        outs = self.conv2(outs)
-        outs = outs.unflatten(0, tensor.shape[:2])
-        
-        # Feature fusion
-        if self.fuse_scheme == 0: # MAX
-            out = outs.max(-4)[0]
-        elif self.fuse_scheme == 1: # SUM
-            out = outs.sum(-4)
-        elif self.fuse_scheme == 2: # MEAN
-            out = outs.mean(-4)
-        else: # Default: MAX
-            out = outs.max(-4)[0]
-        
-        # Feature reconstruction
-        out = self.conv3(out)
-        out = self.conv4(out)
-        return out
+    @torch.no_grad()
+    def init_weight(self, module: nn.Module, /):
+        if not isinstance(module, nn.Conv2d):
+            return
+        if self.use_resnet and module.in_channels == self.in_channels:
+            weight = models.resnet101(weights=models.ResNet101_Weights.DEFAULT).conv1.weight
+            if module.in_channels == 1:
+                weight = weight.sum(1, keepdim=True)
+            module.weight = nn.Parameter(weight, requires_grad=False)
+            return
+        # Apply Kaiming initialization
+        fan_out = module.out_channels
+        for kernel_size in module.kernel_size:
+            fan_out *= kernel_size
+        module.weight.normal_(0.0, (2.0 / fan_out) ** 0.5)
+
+    def forward(self, x: torch.Tensor, /) -> torch.Tensor:
+        n, f = x.size(0), x.size(1)
+        y = x.flatten(0, 1)  # Size (n*f, c, h, w)
+        y = self.extractor(y)  # Size (n*f, 64, h, w)
+        y = y.unflatten(0, (n, f))  # Size (n, f, 64, h, w)
+        y = self.fusor(y)  # Size (n, 64, h, w)
+        y = self.reconstructor(y)  # Size (n, c, h, w)
+        return y
