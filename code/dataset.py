@@ -10,7 +10,7 @@ def toTensor(inp):
 
 class FocalDataset(torch.utils.data.Dataset):
     def __init__(self, path='./integrals', used_focal_lengths_idx=None,
-                 input_channels=3, output_channels=3, augment=False, normalize=True, seed=42):
+                 input_channels=1, output_channels=1, augment=False, normalize=True, seed=42):
         '''
         Dataset class to load generated integral focal stacks
 
