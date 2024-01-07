@@ -24,7 +24,7 @@ class FocalDataset(torch.utils.data.Dataset):
         seed: random seed for augmentation
         '''
         self.path = path
-        self.num_files = len(glob(os.path.join(self.path, '*_integral.tiff')))
+        self.files = glob(os.path.join(self.path, '*_integral.tiff'))
         self.input_channels = input_channels
         self.output_channels = output_channels
         self.augment = augment
@@ -37,17 +37,19 @@ class FocalDataset(torch.utils.data.Dataset):
             self.used_focal_lengths_idx = used_focal_lengths_idx
         
     def __len__(self):
-        return self.num_files
+        return len(self.files)
 
     def __getitem__(self, index):
-        ok, focal_stack = cv2.imreadmulti(os.path.join(self.path, f'{index}_integral.tiff'))
+        tiff_index = os.path.basename(self.files[index]).split('_', 1)[0]
+        
+        ok, focal_stack = cv2.imreadmulti(os.path.join(self.path, tiff_index + '_integral.tiff'))
         if not ok:
-            raise IOError(f'Failed to load index: {index}')
+            raise IOError(f'Failed to load index: {tiff_index}')
             
         focal_stack = np.stack(focal_stack)[...,None]   # shape (num_focal_lengths, w, h, 1)
         focal_stack = focal_stack[self.used_focal_lengths_idx]
 
-        ground_truth = cv2.imread(os.path.join(self.path, f'{index}_gt.png'))[...,[0]]   # shape (w, h, 1)
+        ground_truth = cv2.imread(os.path.join(self.path, tiff_index + '_gt.png'))[...,[0]]   # shape (w, h, 1)
         
         if self.augment:
             # augment the input and target images with random horizontal and vertical flips, and a random number of 90 degree rotations
