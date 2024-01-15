@@ -62,7 +62,7 @@ def main():
     samples_per_update = 8    # number of samples we want to use for a single update (higher means better gradient estimation, but also higher computational cost)
     accumulate_batches = samples_per_update // batch_size    # the number of batches we need to compute to do a single gradient update
     num_batches = num_updates * accumulate_batches           # the number of batches we need to reach our goal of updates and samples_per_update
-    checkpoint_every = 100  # e.g. run validation set, save model, print some logs every n updates
+    checkpoint_every = 100  # e.g. run validation set, save model, print some logs every n updates  /  keep pretty high, validation "wastes" time (probaably higher than this)
 
     model = Swin(img_size=512,
                  in_chans=len(focal_idx),
