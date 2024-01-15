@@ -30,8 +30,8 @@ def get_batch(data_iterator, train_dl):
     if res is None:
         data_iterator = iter(train_dl)
         res = next(data_iterator)
-    stack, gt = res
-    return data_iterator, stack.cuda(non_blocking=True), gt.cuda(non_blocking=True)
+    stack, gt, pos = res
+    return data_iterator, stack.cuda(non_blocking=True), gt.cuda(non_blocking=True), pos.cuda(non_blocking=True)
 
 def main():
     torch.backends.cudnn.benchmark = True
@@ -39,35 +39,57 @@ def main():
     torch.manual_seed(43)
     np.random.seed(43)
 
-    train_ds = FocalDataset(path='./integrals', used_focal_lengths_idx=[0, 1, 3, 5, 7, 8, 9], augment=True)
+    #from dataset import CropDataset
+    from dataset import PositionDataset
+    
+    focal_idx = [0]
+    train_ds = PositionDataset(path='C:\\Users\\chris\\Documents\\JKU\\ComputerVision\\train', used_focal_lengths_idx=focal_idx, augment=True)
 
-    batch_size = 1
+    batch_size = 2
     train_dl = DataLoader(train_ds,
                           batch_size=batch_size,
                           shuffle=True,     # only for training set!
-                          num_workers=2,    # could be useful to prefetch data while the GPU is working
+                          num_workers=4,    # could be useful to prefetch data while the GPU is working
                           pin_memory=True)  # should speed up CPU to GPU data transfer
-    ds_iter, stack, gt = get_batch(iter(train_dl), train_dl)
+    ds_iter, stack, gt, pos = get_batch(iter(train_dl), train_dl)
 
-    val_ds = FocalDataset(path='./integrals_validation', used_focal_lengths_idx=[0, 1, 3, 5, 7, 8, 9], augment=True)
+    val_ds = PositionDataset(path='C:\\Users\\chris\\Documents\\JKU\\ComputerVision\\val', used_focal_lengths_idx=focal_idx, augment=False)
     val_dl = DataLoader(val_ds,
                         batch_size=batch_size,
                         shuffle=False,     # only for training set!
-                        num_workers=2,    # could be useful to prefetch data while the GPU is working
+                        num_workers=4,    # could be useful to prefetch data while the GPU is working
                         pin_memory=True)  # should speed up CPU to GPU data transfer
 
-    num_updates = 430          # the number of gradient updates we want to do
-    samples_per_update = 24    # number of samples we want to use for a single update (higher means better gradient estimation, but also higher computational cost)
+    load_last = True
+    num_updates = 1000          # the number of gradient updates we want to do
+    samples_per_update = 8    # number of samples we want to use for a single update (higher means better gradient estimation, but also higher computational cost)
     accumulate_batches = samples_per_update // batch_size    # the number of batches we need to compute to do a single gradient update
     num_batches = num_updates * accumulate_batches           # the number of batches we need to reach our goal of updates and samples_per_update
-    checkpoint_every = 2  # e.g. run validation set, save model, print some logs every n updates
+    checkpoint_every = 100  # e.g. run validation set, save model, print some logs every n updates
 
-    model = FusionDenoiser(use_checkpoint=True).cuda()
+    #model = FusionDenoiser(use_checkpoint=True).cuda()
+    #from rdn import RDN
+    #model = RDN(in_channels=len(focal_idx), num_features=16, growth_rate=16, num_blocks=8, num_layers=6, use_checkpoint=True).cuda()
+    from swin2sr import Swin2SR as Swin
+    #from swinir import SwinIR as Swin
+    model = Swin(img_size=512,
+                 in_chans=len(focal_idx),
+                 window_size=8,
+                 depths=[2, 2, 2, 2],
+                 num_heads=[4, 4, 4, 4],
+                 embed_dim=32,
+                 mlp_ratio=4,
+                 img_range=1.,
+                 ape=True,
+                 use_checkpoint=True).cuda()
     model.train()
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=0.001)
-    lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=5)
-    loss_fn = CharbonnierLoss().cuda()
+    optimizer = torch.optim.AdamW(model.parameters(), lr=0.0005)
+    lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=5, verbose=True)
+    
+    from loss import PositionEnhancedLoss
+    loss_fn = PositionEnhancedLoss().cuda()
+    #loss_fn = torch.nn.L1Loss().cuda() #CharbonnierLoss().cuda()
 
     scaler = torch.cuda.amp.GradScaler()  # used to scale the loss/gradients to prevent float underflow
 
@@ -78,18 +100,38 @@ def main():
     
     model_path = Path('tmp/model.pth')
     model_path.parent.mkdir(exist_ok=True)
+    
+    last_batch_num = 0
+    
+    if load_last:
+        model.load_state_dict(torch.load('tmp/model.pth'))
+        optimizer.load_state_dict(torch.load('tmp/last_optimizer.pth'))
+        lr_scheduler.load_state_dict(torch.load('tmp/last_scheduler.pth'))
+        scaler.load_state_dict(torch.load('tmp/last_scaler.pth'))
+        for group, lr in zip(optimizer.param_groups, lr_scheduler._last_lr):
+            print('Using last Learning Rate:', lr)
+            group['lr'] = lr
+        
+        stats: dict = json.loads(Path('tmp/stats.json').read_text())
+        last_batch_num = max(map(int, stats.keys()))
+        train_losses, val_losses, _, _ = zip(*stats.values())
+        train_losses = list(train_losses)
+        print('Last training losses',train_losses)
+        best_val_loss = min(val_losses)
+        del val_losses
+        
 
     start_timer()
 
     loop = trange(num_batches)
     for batch_count in loop:
         with torch.autocast(device_type='cuda', dtype=torch.float16):
-            _, denoised = model(stack)   # feed the input to the network
+            denoised = model(stack)   # feed the input to the network
         
-            loss = loss_fn(denoised, gt)
+            loss = loss_fn(denoised, gt, pos)
             acc_loss = loss / accumulate_batches
             
-        ds_iter, stack, gt = get_batch(ds_iter, train_dl)  # load batch during logging and back-propagation
+        ds_iter, stack, gt, pos = get_batch(ds_iter, train_dl)  # load batch during logging and back-propagation
         
         temp_losses.append(loss.item())
         
@@ -99,17 +141,18 @@ def main():
             scaler.step(optimizer)         # update the weights
             scaler.update()                # update scaling parameters
             optimizer.zero_grad()          # reset gradients
-            train_losses.append(np.mean(temp_losses))
-            temp_losses = []
             
             if ((batch_count + 1) // accumulate_batches) % checkpoint_every == 0:
                 # every n-th update
-                val_loss, val_psnr, val_ssim, _, _, _, _ = validate_dataset(val_dl, model, loss_fn)
+                train_losses.append(np.mean(temp_losses[-10*accumulate_batches:]))
+                temp_losses = []
+
+                val_loss, val_psnr, val_ssim, _, _, _ = validate_dataset(val_dl, model, loss_fn)
                 model.train()
 
-                print(f'\nBatch {batch_count+1} Training Loss: {train_losses[-1]:.4f} Validation Loss/PSNR/SSIM: {val_loss:.4f} {val_psnr:.4f} {val_ssim:.4f}')
-                stats[batch_count + 1] = [train_losses[-1], val_loss, val_psnr, val_ssim]
-                Path('tmp/stats').write_text(json.dumps(stats))
+                print(f'\nBatch {batch_count+1+last_batch_num} Training Loss: {train_losses[-1]:.4f} Validation Loss/PSNR/SSIM: {val_loss:.4f} {val_psnr:.4f} {val_ssim:.4f}')
+                stats[batch_count + 1+last_batch_num] = [train_losses[-1], val_loss, val_psnr, val_ssim]
+                Path('tmp/stats.json').write_text(json.dumps(stats))
 
                 if best_val_loss == None or val_loss <= best_val_loss:
                     print(f'Best validation loss found -> saving the model to {model_path.absolute}')
@@ -119,6 +162,9 @@ def main():
                 loop.set_postfix(dict(train_loss=train_losses[-1], val_loss=val_loss, val_psnr=val_psnr, val_ssim=val_ssim))
     
     torch.save(model.state_dict(), 'tmp/last_model.pth')
+    torch.save(optimizer.state_dict(), 'tmp/last_optimizer.pth')
+    torch.save(lr_scheduler.state_dict(), 'tmp/last_scheduler.pth')
+    torch.save(scaler.state_dict(), 'tmp/last_scaler.pth')
 
     end_timer_and_print(f"Finished training for {num_batches} batches with batch size {batch_size}")
 
