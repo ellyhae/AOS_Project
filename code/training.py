@@ -159,6 +159,7 @@ def main():
                 if best_val_loss == None or val_loss <= best_val_loss:
                     print(f'Best validation loss found -> saving the model to {model_path.absolute()}')
                     torch.save(model.state_dict(), model_path)
+                    best_val_loss = val_loss
                 
                 lr_scheduler.step(val_loss)
                 loop.set_postfix(dict(train_loss=train_losses[-1], val_loss=val_loss, val_psnr=val_psnr, val_ssim=val_ssim))
