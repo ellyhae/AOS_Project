@@ -64,7 +64,7 @@ def main(): # for testing the model
     np.random.seed(43)
 
     focal_idx = [0]
-    ds = PositionDataset(path='C:\\Users\\chris\\Documents\\JKU\\ComputerVision\\val', used_focal_lengths_idx=focal_idx, augment=False)
+    ds = PositionDataset(path='val', used_focal_lengths_idx=focal_idx, augment=False)
 
     batch_size = 3
     validation_dl = DataLoader(ds,
