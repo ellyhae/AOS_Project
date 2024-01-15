@@ -7,8 +7,8 @@ import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 import json
 
-from model import FusionDenoiser
-from dataset import FocalDataset
+from swin2sr import Swin2SR as Swin
+from dataset import PositionDataset
 
 # from https://github.com/styler00dollar/pytorch-loss-functions/blob/main/vic/loss.py#L27
 class CharbonnierLoss(nn.Module):
@@ -63,11 +63,8 @@ def main(): # for testing the model
     torch.manual_seed(43)
     np.random.seed(43)
 
-    #from dataset import CropDataset
-    from dataset import PositionDataset
-
     focal_idx = [0]
-    ds = PositionDataset(path='C:\\Users\\chris\\Documents\\JKU\\ComputerVision\\integrals_val', used_focal_lengths_idx=focal_idx, augment=False)
+    ds = PositionDataset(path='C:\\Users\\chris\\Documents\\JKU\\ComputerVision\\val', used_focal_lengths_idx=focal_idx, augment=False)
 
     batch_size = 3
     validation_dl = DataLoader(ds,
@@ -76,10 +73,7 @@ def main(): # for testing the model
                                num_workers=4,    # could be useful to prefetch data while the GPU is working
                                pin_memory=True)  # should speed up CPU to GPU data transfer
 
-    #model = FusionDenoiser(use_checkpoint=True).cuda()
-    #from rdn import RDN
-    #model = RDN(in_channels=len(focal_idx), num_features=16, growth_rate=16, num_blocks=8, num_layers=6, use_checkpoint=True).cuda()
-    from swin2sr import Swin2SR as Swin
+    
     model = Swin(img_size=512,
                  in_chans=len(focal_idx),
                  window_size=8,

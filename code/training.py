@@ -8,8 +8,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 
-from model import FusionDenoiser
-from dataset import FocalDataset
+from swin2sr import Swin2SR as Swin
+from dataset import PositionDataset
 from tqdm import trange
 
 # from https://github.com/styler00dollar/pytorch-loss-functions/blob/main/vic/loss.py#L27
@@ -38,9 +38,6 @@ def main():
 
     torch.manual_seed(43)
     np.random.seed(43)
-
-    #from dataset import CropDataset
-    from dataset import PositionDataset
     
     focal_idx = [0]
     train_ds = PositionDataset(path='C:\\Users\\chris\\Documents\\JKU\\ComputerVision\\train', used_focal_lengths_idx=focal_idx, augment=True)
@@ -67,11 +64,6 @@ def main():
     num_batches = num_updates * accumulate_batches           # the number of batches we need to reach our goal of updates and samples_per_update
     checkpoint_every = 100  # e.g. run validation set, save model, print some logs every n updates
 
-    #model = FusionDenoiser(use_checkpoint=True).cuda()
-    #from rdn import RDN
-    #model = RDN(in_channels=len(focal_idx), num_features=16, growth_rate=16, num_blocks=8, num_layers=6, use_checkpoint=True).cuda()
-    from swin2sr import Swin2SR as Swin
-    #from swinir import SwinIR as Swin
     model = Swin(img_size=512,
                  in_chans=len(focal_idx),
                  window_size=8,
