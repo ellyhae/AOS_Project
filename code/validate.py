@@ -31,14 +31,14 @@ def tens2img(tensor):
 def validate_dataset(validation_dl, model, loss_fn):
     val_loss, val_psnr, val_ssim = 0.0, 0.0, 0.0
     with torch.no_grad():
-        for stack, gt in validation_dl:
+        for stack, gt, pos in validation_dl:
             stack = stack.cuda(non_blocking=True)  # move data to the gpu. non_blocking=True in combination with pin_memory in the dataloader leads to async data transfer, which can speed it up
             gt = gt.cuda(non_blocking=True)
 
             with torch.autocast(device_type='cuda', dtype=torch.float16):
-                fused, denoised = model(stack)   # feed the input to the network
+                denoised = model(stack)   # feed the input to the network
             
-                loss = loss_fn(denoised, gt)
+                loss = loss_fn(denoised, gt, pos)
 
             val_loss += loss.item()
             val_psnr += calculate_psnr_tensor(gt, denoised)
@@ -48,7 +48,13 @@ def validate_dataset(validation_dl, model, loss_fn):
     val_psnr /= len(validation_dl)
     val_ssim /= len(validation_dl)
     
-    return val_loss, val_psnr, val_ssim, stack, gt, fused, denoised
+    #stack, gt, pos = next(iter(validation_dl))
+    #stack = stack.cuda(non_blocking=True)  # move data to the gpu. non_blocking=True in combination with pin_memory in the dataloader leads to async data transfer, which can speed it up
+    #gt = gt.cuda(non_blocking=True)
+    #with torch.autocast(device_type='cuda', dtype=torch.float16):
+    #    denoised = model(stack)
+    
+    return val_loss, val_psnr, val_ssim, stack, gt, denoised
 
 
 def main(): # for testing the model
@@ -57,18 +63,36 @@ def main(): # for testing the model
     torch.manual_seed(43)
     np.random.seed(43)
 
-    ds = FocalDataset(path='./integrals_validation', used_focal_lengths_idx=[0, 1, 3, 5, 7, 8, 9], augment=True)
+    #from dataset import CropDataset
+    from dataset import PositionDataset
 
-    batch_size = 2
+    focal_idx = [0]
+    ds = PositionDataset(path='C:\\Users\\chris\\Documents\\JKU\\ComputerVision\\integrals_val', used_focal_lengths_idx=focal_idx, augment=False)
+
+    batch_size = 3
     validation_dl = DataLoader(ds,
                                batch_size=batch_size,
                                shuffle=False,   # False for validation set
-                               num_workers=0,    # could be useful to prefetch data while the GPU is working
+                               num_workers=4,    # could be useful to prefetch data while the GPU is working
                                pin_memory=True)  # should speed up CPU to GPU data transfer
 
-    model = FusionDenoiser(use_checkpoint=True).cuda()
+    #model = FusionDenoiser(use_checkpoint=True).cuda()
+    #from rdn import RDN
+    #model = RDN(in_channels=len(focal_idx), num_features=16, growth_rate=16, num_blocks=8, num_layers=6, use_checkpoint=True).cuda()
+    from swin2sr import Swin2SR as Swin
+    model = Swin(img_size=512,
+                 in_chans=len(focal_idx),
+                 window_size=8,
+                 depths=[2, 2, 2, 2],
+                 num_heads=[4, 4, 4, 4],
+                 embed_dim=32,
+                 mlp_ratio=4,
+                 img_range=1.,
+                 ape=True,
+                 use_checkpoint=True).cuda()
+    
 
-    existing_model_state = Path('tmp/model.pth')
+    existing_model_state = Path('tmp/last_model.pth')
     if not existing_model_state.exists():
         print(f"Model state not found at {existing_model_state.absolute}")
         exit(1)
@@ -77,43 +101,61 @@ def main(): # for testing the model
     model.load_state_dict(torch.load(existing_model_state))
 
     model.eval()
-    loss_fn = CharbonnierLoss().cuda()
+    #loss_fn = CharbonnierLoss().cuda()
+    from loss import PositionEnhancedLoss
+    loss_fn = PositionEnhancedLoss().cuda()
+    #loss_fn = torch.nn.L1Loss().cuda()
 
-    val_loss, val_psnr, val_ssim, stack, gt, fused, denoised = validate_dataset(validation_dl, model, loss_fn)
+    stack, gt, pos = next(iter(validation_dl))
+    stack = stack.cuda(non_blocking=True)  # move data to the gpu. non_blocking=True in combination with pin_memory in the dataloader leads to async data transfer, which can speed it up
+    gt = gt.cuda(non_blocking=True)
+    with torch.autocast(device_type='cuda', dtype=torch.float16):
+        denoised = model(stack)
 
-    print(f"Validation Loss: {val_loss}, Validation PSNR: {val_psnr}, Validation SSIM: {val_ssim}")
+    #val_loss, val_psnr, val_ssim, stack, gt, denoised = validate_dataset(validation_dl, model, loss_fn)
+
+    stats: dict = json.loads(Path('tmp/stats.json').read_text())
+    batches = [int(key) for key in stats.keys()]
+    train_losses = [value[0] for _, value in stats.items()]
+    val_losses = [value[1] for _, value in stats.items()]
+    psnr = [value[2] for _, value in stats.items()]
+    ssim = [value[3] for _, value in stats.items()] 
+
+    print(f"Validation Loss: {val_losses[-1]}, Validation PSNR: {psnr[-1]}, Validation SSIM: {ssim[-1]}")
 
     # draw chart for losses
-    # stats: dict = json.loads(Path('tmp/stats').read_text())
-    # batches = [int(key) for key in stats.keys()]
-    # psnr = [value[2] for _, value in stats.items()]
-    # ssim = [value[3] for _, value in stats.items()]
+    
+    plt.plot(batches, train_losses, label='Training')
+    plt.plot(batches, val_losses, label='Validation')
+    #plt.plot(batches, ssim, label='SSIM')
+    plt.xlabel('n samples')
+    plt.ylabel('Loss')
+    #plt.ylim(0,1)
+    plt.legend()
+    plt.show()
 
-    # plt.plot(batches, psnr, label='PSNR')
-    # plt.plot(batches, ssim, label='SSIM')
-    # plt.xlabel('n samples')
-    # plt.ylabel('SSIM')
-    # plt.ylim(0,1)
-    # plt.legend()
-    # plt.show()
+    plt.plot(batches, psnr, label='PSNR')
+    #plt.plot(batches, ssim, label='SSIM')
+    plt.xlabel('n samples')
+    plt.ylabel('PSNR')
+    #plt.ylim(0,1)
+    plt.legend()
+    plt.show()
 
-    plot_index = 1
+    fig, axess = plt.subplots(batch_size, 3, figsize=(18,8), sharey=True, sharex=True)
 
-    fig, axes = plt.subplots(1, 4, figsize=(18,8), sharey=True)
+    for axes, s, d, g in zip(axess, stack, denoised, gt):
 
-    a1 = axes[0].imshow(tens2img(stack[plot_index,0]), cmap='gray', vmin=0, vmax=1)
-    plt.colorbar(a1, shrink=0.5)
-    a2 = axes[1].imshow(tens2img(fused[plot_index]), cmap='gray')
-    plt.colorbar(a2, shrink=0.5)
-    a3 = axes[2].imshow(tens2img(denoised[plot_index]), cmap='gray')
-    plt.colorbar(a3, shrink=0.5)
-    a4 = axes[3].imshow(tens2img(gt[plot_index]), cmap='gray', vmin=0, vmax=1)
-    plt.colorbar(a4, shrink=0.5)
+        a1 = axes[0].imshow(tens2img(s[[0]]), cmap='gray', vmin=0, vmax=1)
+        #plt.colorbar(a1, shrink=0.5)
+        a2 = axes[1].imshow(tens2img(d.clamp(0,1)), cmap='gray', vmin=0, vmax=1)
+        #plt.colorbar(a2, shrink=0.5)
+        a3 = axes[2].imshow(tens2img(g), cmap='gray', vmin=0, vmax=1)
+        #plt.colorbar(a3, shrink=0.5)
 
-    axes[0].set_title('One of the inputs')
-    axes[1].set_title('Fused')
-    axes[2].set_title('Denoised')
-    axes[3].set_title('Ground Truth')
+    axess[0][0].set_title('Input')
+    axess[0][1].set_title('Denoised')
+    axess[0][2].set_title('Ground Truth')
     plt.show()
 
 
