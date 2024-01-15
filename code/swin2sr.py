@@ -473,7 +473,7 @@ class PatchEmbed(nn.Module):
         self.in_chans = in_chans
         self.embed_dim = embed_dim
 
-        self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=patch_size)
+        self.proj = nn.Identity() # nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=patch_size)
         if norm_layer is not None:
             self.norm = norm_layer(embed_dim)
         else:
@@ -866,6 +866,7 @@ class Swin2SR(nn.Module):
         else:
             # for image denoising and JPEG compression artifact reduction
             self.conv_last = nn.Conv2d(embed_dim, num_out_ch, 3, 1, 1)
+            self.conv_gray = nn.Conv2d(num_out_ch, 1, 3, 1, 1)
 
         self.apply(self._init_weights)
 
@@ -979,6 +980,7 @@ class Swin2SR(nn.Module):
             x_first = self.conv_first(x)
             res = self.conv_after_body(self.forward_features(x_first)) + x_first
             x = x + self.conv_last(res)
+            x = self.conv_gray(x)
         
         x = x / self.img_range + self.mean
         if self.upsampler == "pixelshuffle_aux":
