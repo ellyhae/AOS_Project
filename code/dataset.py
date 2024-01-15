@@ -14,8 +14,7 @@ class PositionDataset(torch.utils.data.Dataset):
         '''
         Dataset class to load generated integral focal stacks
 
-        used_focal_lengths_idx: list with idx-values from 0-12 are allowed, O = focal-length with 0m, 1 = focal-length with 0.2m,
-            2 = 0.4m, 3 = 0.6m, 4 = 0.8m, ... 12 = 2.4m
+        used_focal_lengths_idx: list with idx-values from 0-3 are allowed, O = focal-length with 0m, 1 = focal-length with 0.4m, 
 
         path: path to directory filled with integral focal stacks and ground truths
         grayscale: if True, return integrals and ground truths with a single color channel. If False, repeats that single channel three times for "rbg"

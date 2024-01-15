@@ -88,10 +88,10 @@ def main(): # for testing the model
 
     existing_model_state = Path('tmp/last_model.pth')
     if not existing_model_state.exists():
-        print(f"Model state not found at {existing_model_state.absolute}")
+        print(f"Model state not found at {existing_model_state.absolute()}")
         exit(1)
     
-    print(f"Using the existing model state from {existing_model_state.absolute}")
+    print(f"Using the existing model state from {existing_model_state.absolute()}")
     model.load_state_dict(torch.load(existing_model_state))
 
     model.eval()

@@ -10,6 +10,7 @@ from torch.utils.data import DataLoader
 
 from swin2sr import Swin2SR as Swin
 from dataset import PositionDataset
+from loss import PositionEnhancedLoss
 from tqdm import trange
 
 # from https://github.com/styler00dollar/pytorch-loss-functions/blob/main/vic/loss.py#L27
@@ -40,7 +41,7 @@ def main():
     np.random.seed(43)
     
     focal_idx = [0]
-    train_ds = PositionDataset(path='C:\\Users\\chris\\Documents\\JKU\\ComputerVision\\train', used_focal_lengths_idx=focal_idx, augment=True)
+    train_ds = PositionDataset(path='train', used_focal_lengths_idx=focal_idx, augment=True)
 
     batch_size = 2
     train_dl = DataLoader(train_ds,
@@ -50,19 +51,24 @@ def main():
                           pin_memory=True)  # should speed up CPU to GPU data transfer
     ds_iter, stack, gt, pos = get_batch(iter(train_dl), train_dl)
 
-    val_ds = PositionDataset(path='C:\\Users\\chris\\Documents\\JKU\\ComputerVision\\val', used_focal_lengths_idx=focal_idx, augment=False)
+    val_ds = PositionDataset(path='val', used_focal_lengths_idx=focal_idx, augment=False)
     val_dl = DataLoader(val_ds,
                         batch_size=batch_size,
                         shuffle=False,     # only for training set!
                         num_workers=4,    # could be useful to prefetch data while the GPU is working
                         pin_memory=True)  # should speed up CPU to GPU data transfer
 
-    load_last = True
-    num_updates = 1000          # the number of gradient updates we want to do
+
+
+
+    ################ Mostly change parameters here (plus the dataset paths above) ##################
+
+    load_last = False    # True: resume training, False: start new training and overwrite old files
+    num_updates = 5000          # the number of gradient updates we want to do (would advise this to be a multiple of checkpoint_every)
     samples_per_update = 8    # number of samples we want to use for a single update (higher means better gradient estimation, but also higher computational cost)
     accumulate_batches = samples_per_update // batch_size    # the number of batches we need to compute to do a single gradient update
     num_batches = num_updates * accumulate_batches           # the number of batches we need to reach our goal of updates and samples_per_update
-    checkpoint_every = 100  # e.g. run validation set, save model, print some logs every n updates  /  keep pretty high, validation "wastes" time (probaably higher than this)
+    checkpoint_every = 500  # e.g. run validation set, save model, print some logs every n updates  /  keep pretty high, validation "wastes" time, but also not too high, as the lr_scheduler needs the result as input to do anything
 
     model = Swin(img_size=512,
                  in_chans=len(focal_idx),
@@ -78,10 +84,14 @@ def main():
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=0.0005)
     lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=5, verbose=True)
-    
-    from loss import PositionEnhancedLoss
-    loss_fn = PositionEnhancedLoss().cuda()
-    #loss_fn = torch.nn.L1Loss().cuda() #CharbonnierLoss().cuda()
+
+    loss_fn = PositionEnhancedLoss(length=96, factor=.5).cuda()
+
+    ####################################################################
+
+
+
+
 
     scaler = torch.cuda.amp.GradScaler()  # used to scale the loss/gradients to prevent float underflow
 
@@ -136,7 +146,7 @@ def main():
             
             if ((batch_count + 1) // accumulate_batches) % checkpoint_every == 0:
                 # every n-th update
-                train_losses.append(np.mean(temp_losses[-10*accumulate_batches:]))
+                train_losses.append(np.mean(temp_losses[-20*accumulate_batches:]))
                 temp_losses = []
 
                 val_loss, val_psnr, val_ssim, _, _, _ = validate_dataset(val_dl, model, loss_fn)
@@ -147,7 +157,7 @@ def main():
                 Path('tmp/stats.json').write_text(json.dumps(stats))
 
                 if best_val_loss == None or val_loss <= best_val_loss:
-                    print(f'Best validation loss found -> saving the model to {model_path.absolute}')
+                    print(f'Best validation loss found -> saving the model to {model_path.absolute()}')
                     torch.save(model.state_dict(), model_path)
                 
                 lr_scheduler.step(val_loss)
