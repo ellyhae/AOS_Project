@@ -158,7 +158,6 @@ def main():
                 Path('tmp/stats.json').write_text(json.dumps(stats))
 
                 if best_val_loss == None or val_loss <= best_val_loss:
-                    best_val_loss = val_loss
                     print(f'Best validation loss found -> saving the model to {model_path.absolute()}')
                     torch.save(model.state_dict(), model_path)
                     best_val_loss = val_loss
