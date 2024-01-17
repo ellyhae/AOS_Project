@@ -83,8 +83,8 @@ def calculate_metrics(denoised, ground_truth):
     dn = denoised[None,:].float()
     gt = ground_truth[None,:].float()
     loss = nn.functional.l1_loss(dn, gt).item()
-    psnr = calculate_psnr_tensor(gt, dn)
-    ssim = calculate_ssim_tensor(gt, dn)
+    psnr = calculate_psnr_tensor(gt, dn, 255.)
+    ssim = calculate_ssim_tensor(gt, dn, 255.)
     return [loss, psnr, ssim]
 
 def main():

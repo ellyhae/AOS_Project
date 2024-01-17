@@ -25,17 +25,17 @@ def end_timer_and_print(local_msg):
     print("Total execution time = {:.3f} sec".format(end_time - start_time))
     print("Max memory used by tensors = {:.3f} GB".format(torch.cuda.max_memory_allocated() / 1024**3))
 
-def calculate_psnr_tensor(target, prediction):
+def calculate_psnr_tensor(target, prediction, data_range=1.):
     mse = torch.mean((target - prediction) ** 2)
-    psnr = 20 * torch.log10(torch.tensor(255.0)) - 10 * torch.log10(mse)
+    psnr = 20 * torch.log10(torch.tensor(data_range)) - 10 * torch.log10(mse)
     return psnr.item()  # Convert to Python scalar
 
-def calculate_ssim_tensor(target, prediction):
+def calculate_ssim_tensor(target, prediction, data_range=1.):
     # ensure the input tensors are float32, as required by pytorch_msssim
     target = target.type(torch.float32)
     prediction = prediction.type(torch.float32)
 
     # the ssim function expects tensors in the shape of (batch, channel, height, width)
     # ensure your tensors are correctly shaped
-    ssim_value = ssim(target, prediction, data_range=255, size_average=True)  # size_average to return the average of SSIM
+    ssim_value = ssim(target, prediction, data_range=data_range, size_average=True)  # size_average to return the average of SSIM
     return ssim_value.item()  # make it python scalar
