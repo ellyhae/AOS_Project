@@ -5,12 +5,21 @@ class PositionEnhancedLoss(nn.Module):
     Calculates the two losses, one for within a path around the target position and one for all other pixels.
     With factor=0.5 the two losses are considered equally important, closer to 1. makes the target positions more important
     '''
-    def __init__(self, length=96, factor=.5):#length=128, factor=.8):
+    def __init__(self, length=96, factor=.5, mode='l1'):#length=128, factor=.8):
         super(PositionEnhancedLoss, self).__init__()
         self.length = length
         self.half_length = self.length // 2
         self.factor = factor
-        self.loss_fn = nn.L1Loss(reduction='none')
+        self.mode = mode
+        match self.mode:
+            case 'l1':
+                self.loss_fn = nn.L1Loss(reduction='none')
+            case 'mse':
+                self.loss_fn = nn.MSELoss(reduction='none')
+            case 'smoothl1':
+                self.loss_fn = nn.SmoothL1Loss(beta=0.5, reduction='none')
+            case _:
+                raise ValueError(f'invalid mode \'{self.mode}\'')
     
     def crop_dim(self, d):
         top = d - self.half_length
