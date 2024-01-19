@@ -11,6 +11,8 @@ import json
 from glob import glob
 from tqdm import tqdm
 
+from torchvision.transforms import Resize
+
 from swin2sr import Swin2SR as Swin
 from dataset import PositionDataset
 
@@ -43,40 +45,57 @@ def tens2img(tensor: torch.Tensor):
     return np.moveaxis(tensor.detach().cpu().numpy(), 0,-1)
 
 def load_tiff(path: str, focal_idx: list):
+    '''Load the tiff image from the given path, select the goven focal heights (using the index).
+    Return a Tensor of shape (num_focal_heights, H, W) with pixel values in the range [0-155]'''
     ok, focal_stack = cv2.imreadmulti(path)
     if not ok:
         raise IOError(f'Failed to load index: {path}')
         
-    focal_stack = np.stack(focal_stack)   # shape (num_focal_lengths, w, h)
+    focal_stack = np.stack(focal_stack)   # shape (num_focal_lengths, H, W)
     focal_stack = focal_stack[focal_idx]
-    #focal_stack = np.moveaxis(focal_stack, 0, -1)
-    focal_stack = torch.from_numpy(focal_stack).contiguous().div(256)
+    focal_stack = torch.from_numpy(focal_stack)
     return focal_stack
+
+def preprocess(stack: torch.Tensor):
+    '''Resize and normalize the images in the stack'''
+    return Resize(512)(stack.contiguous().div(256))
 
 @torch.no_grad()
 @torch.autocast(device_type='cuda', dtype=torch.float16)
-def self_ensemble(model: Swin, stack: torch.Tensor):
+def self_ensemble(model: Swin, stack: torch.Tensor, passes:int = 2):
+    '''Calculate the model output for the given input stack.
+    The stack is assumed to be of shape (num_focal_height, H, W) with pixel values in the range [0,1].
+    The stack is assumed to be ordered by ascending focal height, i.e. stack[0] is the closest to 0m (the floor)
+    The model is assumed to only work on single channel images, so the results for different focal heights are calculated separately and then aggregated later'''
+
     get_rots = lambda x: [torch.rot90(x, i, (-2, -1)) for i in range(4)]
     undo_rots = lambda x: [torch.rot90(j, -i, (-2, -1)) for i, j in enumerate(x)]
-
     ### maybe also include flipped versions
-    versions = torch.stack(get_rots(stack)).cuda()
 
-    preds = model(versions)
+    first = True
+    no_ensemble_denoised = None
+    denoised = stack
+    # feed the output through the model several times
+    for _ in range(passes):
+        fixed_preds = []
+        for integral in denoised:
+            integral = integral[None,:]  # see each integral as an individual grayscale image
 
-    no_ensemble_denoised = preds[0]
+            versions = torch.stack(get_rots(integral)).cuda()
 
-    fixed_preds = torch.stack(undo_rots(preds))
-    denoised = fixed_preds.median(0).values
+            preds = model(versions)
+
+            if first:  # assume the first integral in the stack as the training height
+                no_ensemble_denoised = preds[0]  # store it's unmodified prediction for comparison
+                first = False
+
+            fixed_preds += undo_rots(preds)
+
+        denoised = torch.stack(fixed_preds).median(0).values
     return no_ensemble_denoised, denoised
 
 def postprocess(stack: torch.Tensor):
-    #med = stack.median() #.values()
-    #mask = stack < med
-    #scale = 100
-    #stack[mask] = stack[mask].mul(scale).ceil().div(scale)
-    #stack[~mask] = stack[~mask].mul(scale).floor().div(scale)
-    #stack = stack.round(decimals=2)
+    '''Convert the model output to the range [0, 255]'''
     return stack.mul(256).clip(0, 255).int()
 
 def calculate_metrics(denoised, ground_truth):
@@ -88,23 +107,31 @@ def calculate_metrics(denoised, ground_truth):
     return [loss, psnr, ssim]
 
 def main():
-    model = load_model('tmp/model_72000.pth')
+    model = load_model('tmp/model_130k.pth')
+    denoising_passes = 2
 
     focal_idx = [0]
     input_image_path = 'test'#\\0_45_0_2_integral.tiff'
+
+    # if a path to a directory was given, load all tiff files from there. Useful for calculating the loss over some daterset
     if os.path.isdir(input_image_path):
         print('Detected folder as input path, loading all files')
-        image_files = glob(os.path.join(input_image_path, '*_integral.tiff'))
+        image_files = glob(os.path.join(input_image_path, '*_integral.tiff'))[:100]
+    # if the path is a file, treat it as if it's a dataset with only one sample. Makes further code more concise
     else:
         image_files = [input_image_path]
-
     
     ## make predictions
     metrics, ensemble_metrics = [], []
+    # Loop over all image files. Load each tiff file as a (num_focal_heights, H, W) Tensor, preprocess it and calculate the prediction
     for f in tqdm(image_files, desc='Calculating output(s)'):
-        stack = load_tiff(f, focal_idx)
-        no_ensemble_denoised, denoised = map(postprocess, self_ensemble(model, stack))
 
+        stack = load_tiff(f, focal_idx)
+        stack = preprocess(stack)
+
+        no_ensemble_denoised, denoised = map(postprocess, self_ensemble(model, stack, denoising_passes))
+
+        # If a ground truth image is present, calculate key metrics. Useful for getting an overview of the model on some dataset
         gt_path = f.removesuffix('integral.tiff') + 'gt.png'
         gt = os.path.exists(gt_path)
         if gt:
@@ -114,28 +141,26 @@ def main():
     loss, psnr, ssim = np.mean(metrics, 0)
     ensemble_loss, ensemble_psnr, ensemble_ssim = np.mean(ensemble_metrics, 0)
     
+    # if ground truths were available, print the results
     if gt:
         print('\n                   L1 Loss / PSNR / SSIM:')
         print(f'Simple denoised:   {loss:.3f} / {psnr:.3f} / {ssim:.3f}')
         print(f'Ensemble Denoised: {ensemble_loss:.3f} / {ensemble_psnr:.3f} / {ensemble_ssim:.3f}')
 
 
+    # plot the last input-denoised pair
     fig, axes = plt.subplots(1, 4 if gt else 3, figsize=(18,8), sharey=True, sharex=True)
 
-    a1 = axes[0].imshow(tens2img(stack), cmap='gray', vmin=0, vmax=1)
-    #plt.colorbar(a1, shrink=0.5)
-    a2 = axes[1].imshow(tens2img(no_ensemble_denoised), cmap='gray', vmin=0, vmax=255)
-    #plt.colorbar(a2, shrink=0.5)
-    a3 = axes[2].imshow(tens2img(denoised), cmap='gray', vmin=0, vmax=255)
-    #a3 = axes[2].imshow(tens2img(g), cmap='gray', vmin=0, vmax=1)
-    #plt.colorbar(a3, shrink=0.5)
+    axes[0].imshow(tens2img(stack[[0]]), cmap='gray', vmin=0, vmax=1)
+    axes[1].imshow(tens2img(no_ensemble_denoised), cmap='gray', vmin=0, vmax=255)
+    axes[2].imshow(tens2img(denoised), cmap='gray', vmin=0, vmax=255)
 
     axes[0].set_title('Input')
     axes[1].set_title('Denoised')
     axes[2].set_title('Self Ensemble Denoised')
 
     if gt:
-        a4 = axes[3].imshow(tens2img(ground_truth), cmap='gray', vmin=0, vmax=255)
+        axes[3].imshow(tens2img(ground_truth), cmap='gray', vmin=0, vmax=255)
         axes[3].set_title('Ground Truth')
 
     plt.show()
