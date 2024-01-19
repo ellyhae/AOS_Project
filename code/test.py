@@ -72,7 +72,7 @@ def self_ensemble(model: Swin, stack: torch.Tensor, passes:int = 2):
     undo_rots = lambda x: [torch.rot90(j, -i, (-2, -1)) for i, j in enumerate(x)]
     ### maybe also include flipped versions
 
-    first = True
+    single_pass_denoised = None
     no_ensemble_denoised = None
     denoised = stack
     # feed the output through the model several times
@@ -85,14 +85,16 @@ def self_ensemble(model: Swin, stack: torch.Tensor, passes:int = 2):
 
             preds = model(versions)
 
-            if first:  # assume the first integral in the stack as the training height
-                no_ensemble_denoised = preds[0]  # store it's unmodified prediction for comparison
-                first = False
+            if no_ensemble_denoised is None:  # assume the first integral in the stack as the training height
+                no_ensemble_denoised = preds[0].clone()  # store it's unmodified prediction for comparison
 
             fixed_preds += undo_rots(preds)
 
         denoised = torch.stack(fixed_preds).median(0).values
-    return no_ensemble_denoised, denoised
+
+        if single_pass_denoised is None:
+            single_pass_denoised = denoised.clone()
+    return no_ensemble_denoised, single_pass_denoised, denoised
 
 def postprocess(stack: torch.Tensor):
     '''Convert the model output to the range [0, 255]'''
@@ -111,25 +113,26 @@ def main():
     denoising_passes = 2
 
     focal_idx = [0]
-    input_image_path = 'test'#\\0_45_0_2_integral.tiff'
+    input_image_path = 'val'#0_130_2_-5_integral.tiff'
 
     # if a path to a directory was given, load all tiff files from there. Useful for calculating the loss over some daterset
     if os.path.isdir(input_image_path):
         print('Detected folder as input path, loading all files')
-        image_files = glob(os.path.join(input_image_path, '*_integral.tiff'))[:100]
+        image_files = glob(os.path.join(input_image_path, '*_integral.tiff'))
     # if the path is a file, treat it as if it's a dataset with only one sample. Makes further code more concise
     else:
         image_files = [input_image_path]
     
     ## make predictions
-    metrics, ensemble_metrics = [], []
+    multipass = denoising_passes > 1
+    metrics, ensemble_metrics, multipass_metrics = [], [], []
     # Loop over all image files. Load each tiff file as a (num_focal_heights, H, W) Tensor, preprocess it and calculate the prediction
     for f in tqdm(image_files, desc='Calculating output(s)'):
 
         stack = load_tiff(f, focal_idx)
         stack = preprocess(stack)
 
-        no_ensemble_denoised, denoised = map(postprocess, self_ensemble(model, stack, denoising_passes))
+        no_ensemble_denoised, single_pass_denoised, denoised = map(postprocess, self_ensemble(model, stack, denoising_passes))
 
         # If a ground truth image is present, calculate key metrics. Useful for getting an overview of the model on some dataset
         gt_path = f.removesuffix('integral.tiff') + 'gt.png'
@@ -137,31 +140,39 @@ def main():
         if gt:
             ground_truth = torch.from_numpy(np.moveaxis(cv2.imread(gt_path)[...,[0]], -1, 0)).int().cuda()
             metrics.append(calculate_metrics(no_ensemble_denoised, ground_truth))
-            ensemble_metrics.append(calculate_metrics(denoised, ground_truth))
+            ensemble_metrics.append(calculate_metrics(single_pass_denoised, ground_truth))
+            multipass_metrics.append(calculate_metrics(denoised, ground_truth))
     loss, psnr, ssim = np.mean(metrics, 0)
     ensemble_loss, ensemble_psnr, ensemble_ssim = np.mean(ensemble_metrics, 0)
+    multipass_loss, multipass_psnr, multipass_ssim = np.mean(multipass_metrics, 0)
     
     # if ground truths were available, print the results
     if gt:
         print('\n                   L1 Loss / PSNR / SSIM:')
         print(f'Simple denoised:   {loss:.3f} / {psnr:.3f} / {ssim:.3f}')
-        print(f'Ensemble Denoised: {ensemble_loss:.3f} / {ensemble_psnr:.3f} / {ensemble_ssim:.3f}')
+        print(f'+ Ensemble:        {ensemble_loss:.3f} / {ensemble_psnr:.3f} / {ensemble_ssim:.3f}')
+        if multipass:
+            print(f'+ Multi-Pass [{denoising_passes}]:  {multipass_loss:.3f} / {multipass_psnr:.3f} / {multipass_ssim:.3f}')
 
 
     # plot the last input-denoised pair
-    fig, axes = plt.subplots(1, 4 if gt else 3, figsize=(18,8), sharey=True, sharex=True)
+    fig, axes = plt.subplots(1, 3 + gt + multipass, figsize=(18,8), sharey=True, sharex=True)
 
     axes[0].imshow(tens2img(stack[[0]]), cmap='gray', vmin=0, vmax=1)
     axes[1].imshow(tens2img(no_ensemble_denoised), cmap='gray', vmin=0, vmax=255)
-    axes[2].imshow(tens2img(denoised), cmap='gray', vmin=0, vmax=255)
+    axes[2].imshow(tens2img(single_pass_denoised), cmap='gray', vmin=0, vmax=255)
 
     axes[0].set_title('Input')
     axes[1].set_title('Denoised')
-    axes[2].set_title('Self Ensemble Denoised')
+    axes[2].set_title('+ Self Ensemble')
+
+    if multipass:
+        axes[3].imshow(tens2img(denoised), cmap='gray', vmin=0, vmax=255)
+        axes[3].set_title(f'+ Multi-Pass [{denoising_passes}]')
 
     if gt:
-        axes[3].imshow(tens2img(ground_truth), cmap='gray', vmin=0, vmax=255)
-        axes[3].set_title('Ground Truth')
+        axes[-1].imshow(tens2img(ground_truth), cmap='gray', vmin=0, vmax=255)
+        axes[-1].set_title('Ground Truth')
 
     plt.show()
 
