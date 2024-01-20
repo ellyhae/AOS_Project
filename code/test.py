@@ -113,35 +113,40 @@ def main():
     denoising_passes = 2
 
     focal_idx = [0]
-    input_image_path = 'val'#0_130_2_-5_integral.tiff'
+    input_image_path = 'val'    #0_130_2_-5_integral.tiff'
 
-    # if a path to a directory was given, load all tiff files from there. Useful for calculating the loss over some daterset
+    # added different support of datatypes
+    # every format supported by cv2.imreadmulti(path) is allowed: e.g. png, jpg
+    # important: write datatype here without a "." in the beginning!
+    datatype = "tiff"
+
+    # if a path to a directory was given, load all tiff files from there. Useful for calculating the loss over some dataset
     if os.path.isdir(input_image_path):
         print('Detected folder as input path, loading all files')
-        image_files = glob(os.path.join(input_image_path, '*_integral.tiff'))
+        image_files = glob(os.path.join(input_image_path, f"*_integral.{datatype}"))
     # if the path is a file, treat it as if it's a dataset with only one sample. Makes further code more concise
     else:
         image_files = [input_image_path]
-    
+
     ## make predictions
     multipass = denoising_passes > 1
     metrics, ensemble_metrics, multipass_metrics = [], [], []
     # Loop over all image files. Load each tiff file as a (num_focal_heights, H, W) Tensor, preprocess it and calculate the prediction
     for f in tqdm(image_files, desc='Calculating output(s)'):
-
         stack = load_tiff(f, focal_idx)
         stack = preprocess(stack)
 
         no_ensemble_denoised, single_pass_denoised, denoised = map(postprocess, self_ensemble(model, stack, denoising_passes))
 
         # If a ground truth image is present, calculate key metrics. Useful for getting an overview of the model on some dataset
-        gt_path = f.removesuffix('integral.tiff') + 'gt.png'
+        gt_path = f.removesuffix(f"integral.{datatype}") + 'gt.png'
         gt = os.path.exists(gt_path)
         if gt:
             ground_truth = torch.from_numpy(np.moveaxis(cv2.imread(gt_path)[...,[0]], -1, 0)).int().cuda()
             metrics.append(calculate_metrics(no_ensemble_denoised, ground_truth))
             ensemble_metrics.append(calculate_metrics(single_pass_denoised, ground_truth))
             multipass_metrics.append(calculate_metrics(denoised, ground_truth))
+
     loss, psnr, ssim = np.mean(metrics, 0)
     ensemble_loss, ensemble_psnr, ensemble_ssim = np.mean(ensemble_metrics, 0)
     multipass_loss, multipass_psnr, multipass_ssim = np.mean(multipass_metrics, 0)
