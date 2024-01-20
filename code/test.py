@@ -94,6 +94,10 @@ def self_ensemble(model: Swin, stack: torch.Tensor, passes:int = 2):
 
         if single_pass_denoised is None:
             single_pass_denoised = denoised.clone()
+
+    # safeguard against making results worse
+    if single_pass_denoised.std() < denoised.std():
+        denoised = single_pass_denoised
     return no_ensemble_denoised, single_pass_denoised, denoised
 
 def postprocess(stack: torch.Tensor):
