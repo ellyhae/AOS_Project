@@ -10,6 +10,7 @@ import cv2
 import json
 from glob import glob
 from tqdm import tqdm
+from PIL import Image
 
 from torchvision.transforms import Resize
 
@@ -104,20 +105,30 @@ def postprocess(stack: torch.Tensor):
     '''Convert the model output to the range [0, 255]'''
     return stack.mul(256).clip(0, 255).int()
 
-def calculate_metrics(denoised, ground_truth):
+def calculate_metrics(denoised, ground_truth, normalize=True):
+    data_range = 255.
+    if normalize:
+        denoised = denoised/255.
+        ground_truth = ground_truth/255.
+        data_range = 1.
+
     dn = denoised[None,:].float()
     gt = ground_truth[None,:].float()
     loss = nn.functional.l1_loss(dn, gt).item()
-    psnr = calculate_psnr_tensor(gt, dn, 255.)
-    ssim = calculate_ssim_tensor(gt, dn, 255.)
-    return [loss, psnr, ssim]
+    psnr = calculate_psnr_tensor(gt, dn, data_range)
+    ssim = calculate_ssim_tensor(gt, dn, data_range)
+    mse = nn.functional.mse_loss(dn, gt).item()
+    return [loss, psnr, ssim, mse]
 
 def main():
-    model = load_model('tmp/model_130k.pth')
+    output_folder = 'results'
+    os.makedirs(output_folder, exist_ok=True)
+
+    model = load_model('tmp/submission_model.pth')  # seems that using median in self ensemble is good for pure models (195k), while mean seems good for multipass trained models (699)
     denoising_passes = 2
 
     focal_idx = [0]
-    input_image_path = 'val'    #0_130_2_-5_integral.tiff'
+    input_image_path = 'test'#val\\0_130_2_-5_integral.tiff'
 
     # added different support of datatypes
     # every format supported by cv2.imreadmulti(path) is allowed: e.g. png, jpg
@@ -142,6 +153,9 @@ def main():
 
         no_ensemble_denoised, single_pass_denoised, denoised = map(postprocess, self_ensemble(model, stack, denoising_passes))
 
+        im = Image.fromarray(denoised[0].cpu().numpy().astype(np.uint8))
+        im.save(os.path.join(output_folder, os.path.splitext(os.path.basename(f))[0] + '.png'))
+
         # If a ground truth image is present, calculate key metrics. Useful for getting an overview of the model on some dataset
         gt_path = f.removesuffix(f"integral.{datatype}") + 'gt.png'
         gt = os.path.exists(gt_path)
@@ -151,17 +165,17 @@ def main():
             ensemble_metrics.append(calculate_metrics(single_pass_denoised, ground_truth))
             multipass_metrics.append(calculate_metrics(denoised, ground_truth))
 
-    loss, psnr, ssim = np.mean(metrics, 0)
-    ensemble_loss, ensemble_psnr, ensemble_ssim = np.mean(ensemble_metrics, 0)
-    multipass_loss, multipass_psnr, multipass_ssim = np.mean(multipass_metrics, 0)
+    loss, psnr, ssim, mse = np.mean(metrics, 0)
+    ensemble_loss, ensemble_psnr, ensemble_ssim, ensemble_mse = np.mean(ensemble_metrics, 0)
+    multipass_loss, multipass_psnr, multipass_ssim, multipass_mse = np.mean(multipass_metrics, 0)
     
     # if ground truths were available, print the results
     if gt:
-        print('\n                   L1 Loss / PSNR / SSIM:')
-        print(f'Simple denoised:   {loss:.3f} / {psnr:.3f} / {ssim:.3f}')
-        print(f'+ Ensemble:        {ensemble_loss:.3f} / {ensemble_psnr:.3f} / {ensemble_ssim:.3f}')
+        print('\n                   L1 Loss / MSE  / PSNR / SSIM:')
+        print(f'Simple denoised:   {loss:.4f} / {mse:.4f} / {psnr:.3f} / {ssim:.3f}')
+        print(f'+ Ensemble:        {ensemble_loss:.4f} / {ensemble_mse:.4f} / {ensemble_psnr:.3f} / {ensemble_ssim:.3f}')
         if multipass:
-            print(f'+ Multi-Pass [{denoising_passes}]:  {multipass_loss:.3f} / {multipass_psnr:.3f} / {multipass_ssim:.3f}')
+            print(f'+ Multi-Pass [{denoising_passes}]:  {multipass_loss:.4f} / {multipass_mse:.4f} / {multipass_psnr:.3f} / {multipass_ssim:.3f}')
 
 
     # plot the last input-denoised pair
