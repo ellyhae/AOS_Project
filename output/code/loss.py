@@ -5,7 +5,7 @@ class PositionEnhancedLoss(nn.Module):
     Calculates the two losses, one for within a path around the target position and one for all other pixels.
     With factor=0.5 the two losses are considered equally important, closer to 1. makes the target positions more important
     '''
-    def __init__(self, length=96, factor=.5, mode='l1'):#length=128, factor=.8):
+    def __init__(self, length=96, factor=.5, mode='l1'):
         super(PositionEnhancedLoss, self).__init__()
         self.length = length
         self.half_length = self.length // 2
@@ -39,7 +39,6 @@ class PositionEnhancedLoss(nn.Module):
         yys, xxs = self.crop_dim(position[:,0]), self.crop_dim(position[:,1])
         patch_sum = 0.
         for i, (yy, xx) in enumerate(zip(yys, xxs)):
-            #loss[i, :, yy[0]:yy[1], xx[0]:xx[1]] *= self.factor
             patch_sum += loss[i, :, yy[0]:yy[1], xx[0]:xx[1]].sum()
             loss[i, :, yy[0]:yy[1], xx[0]:xx[1]] = 0
         patch_numel = (loss.size(0) * loss.size(1) * self.length ** 2)
