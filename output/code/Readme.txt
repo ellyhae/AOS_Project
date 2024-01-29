@@ -72,3 +72,5 @@ This file does not offer a command line interface, so the options need to be adj
   Focal_planes     List of focal planes for the focal stack. Focal distance is set to the ground, so the ground is at 0. Negative numbers go up
 
 We generated our dataset with 4 different focal planes, however, we only use the first (0m) for training. Therefore, for generating a new dataset it would be enough to generate integrals for that one height.
+
+As this script is supposed to be run in the folder and environment of the provided AOS repository (at path AOS\AOS for Drone Swarms\LFR\python), we do not include the requirements in our requirements.txt file.
