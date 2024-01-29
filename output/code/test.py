@@ -326,7 +326,7 @@ if __name__ == "__main__":
     parser = ArgumentParser(description="Testing interface for SwinSR")
     parser.add_argument("--input_image_path", type=str, default="test/")
     parser.add_argument("--folder_datatype", type=str, default="tiff")
-    parser.add_argument("--model_path", type=str, default="out/model.pth")
+    parser.add_argument("--model_path", type=str, default="weights/model.pth")
     parser.add_argument("--get_info_every", type=int, default=1000)
     parser.add_argument("--output_folder", type=str, default="out/")
     parser.add_argument('--make_plots', action=BooleanOptionalAction, default=False)
