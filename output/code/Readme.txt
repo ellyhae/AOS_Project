@@ -47,13 +47,13 @@ usage: train.py [-h] [--train_path TRAIN_PATH] [--val_path VAL_PATH] [--model_pa
 Training interface for SwinSR
 
 options:
-  -h, --help            					      show this help message and exit
-  --train_path TRAIN_PATH					      path to the directory that contains training data (.tiff) files. default: train/
-  --val_path VAL_PATH						      path to the directory that contains validation data (.tiff) files. default: val/
-  --model_path MODEL_PATH					      path to the weights of a trained model to continue training. e.g. weights/model.pth.
-  --samples_per_update SAMPLES_PER_UPDATE	      the number of samples that needs to be used for a single update. default: 16
+  -h, --help            					            show this help message and exit
+  --train_path TRAIN_PATH					            path to the directory that contains training data (.tiff) files. default: train/
+  --val_path VAL_PATH						              path to the directory that contains validation data (.tiff) files. default: val/
+  --model_path MODEL_PATH					            path to the weights of a trained model to continue training. e.g. weights/model.pth.
+  --samples_per_update SAMPLES_PER_UPDATE	    the number of samples that needs to be used for a single update. default: 16
   --checkpoint_every CHECKPOINT_EVERY		      number of samples between every checkpoint. e.g. calculating validation loss, saving the model, etc. default: 200
-  --multi_pass, --no-multi_pass				      boolean flag to select the training mode. if --multi_pass is specified the model is trained with double path, otherwise single pass.
+  --multi_pass, --no-multi_pass				        boolean flag to select the training mode. if --multi_pass is specified the model is trained with double path, otherwise single pass.
 ```
 
 #### Example Usage:
@@ -61,3 +61,16 @@ options:
 python train.py --train_path train --val_path val --checkpoint_every 200 --samples_per_update 16 --no-multi_pass
 python train.py --train_path train --val_path val --model_path tmp/model.pth --checkpoint_every 200 --samples_per_update 16 --multi_pass
 ```
+
+## Generate a new Dataset
+
+`sim2int.py` is an adaptation of the code provided to us for generating integral files. Instead of generating a single integral for a single simulation, it loops over a folder full of simulations and generates a focal stack for each one. The focal stack is stored in a single file with the naming convention [batch ID]_[index]_[x]_[y]_integral.tiff and the corresponding ground truth is copied and renamed to [batch ID]_[index]_[x]_[y]_gt.png, where x and y are taken from the parameters file and indicate the persons location or N for both if no person is present.
+
+This file does not offer a command line interface, so the options need to be adjusted in the file. All relevant variables are at the top of the file:
+  input_path       path to a downloaded sample batch
+  Integral_Path    path to the directory where you want to save the results.
+  Focal_planes     List of focal planes for the focal stack. Focal distance is set to the ground, so the ground is at 0. Negative numbers go up
+
+We generated our dataset with 4 different focal planes, however, we only use the first (0m) for training. Therefore, for generating a new dataset it would be enough to generate integrals for that one height.
+
+As this script is supposed to be run in the folder and environment of the provided AOS repository (at path AOS\AOS for Drone Swarms\LFR\python), we do not include the requirements in our requirements.txt file.
