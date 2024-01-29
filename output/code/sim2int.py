@@ -32,7 +32,7 @@ import glm
 import re
 import glob
 
-
+### PARAMETERS TO SPECIFY
 input_path = r"Batch2\Part2"                                       # path to a downloaded sample batch
 Integral_Path = r'integrals'                                       # path to the directory where you want to save the results.
 Focal_planes = np.arange(4) * 0.4       # List of focal planes for focal stack. Focal plane is set to the ground so it is zero. Negative numbers to go up

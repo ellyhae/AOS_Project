@@ -64,7 +64,9 @@ python train.py --train_path train --val_path val --model_path tmp/model.pth --c
 
 ## Generate a new Dataset
 
-`sim2int.py` is an adaptation of the code provided to us for generating integral files. Instead of generating a single integral for a single simulation, it loops over a folder full of simulations and generates a focal stack for each one. The focal stack is stored in a single file with the naming convention [batch ID]_[index]_[x]_[y]_integral.tiff and the corresponding ground truth is copied and renamed to [batch ID]_[index]_[x]_[y]_gt.png, where x and y are taken from the parameters file and indicate the persons location or N for both if no person is present.
+`sim2int.py` is an adaptation of the code provided to us for generating integral files. Instead of generating a single integral for a single simulation, it loops over a folder full of simulations and generates a focal stack for each one.
+The focal stack is stored in a single file with the naming convention [batch ID]_[index]_[x]_[y]_integral.tiff and the corresponding ground truth is copied and renamed to [batch ID]_[index]_[x]_[y]_gt.png,
+where x and y are taken from the parameters file and indicate the persons location or N for both if no person is present.
 
 This file does not offer a command line interface, so the options need to be adjusted in the file. All relevant variables are at the top of the file:
   input_path       path to a downloaded sample batch
