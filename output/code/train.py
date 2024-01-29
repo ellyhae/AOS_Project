@@ -29,7 +29,7 @@ def main(train_path, val_path, model_path, samples_per_update, checkpoint_every,
     torch.manual_seed(43)
     np.random.seed(43)
 
-    tmp_path = Path('tmp')
+    tmp_path = Path('weights')
     tmp_path.mkdir(exist_ok=True)
 
     focal_idx = [0]  # the focal length used, 0 means ground level
@@ -80,15 +80,15 @@ def main(train_path, val_path, model_path, samples_per_update, checkpoint_every,
     last_batch_num = 0
 
     if load_last:
-        model.load_state_dict(torch.load('tmp/last_model.pth'))
-        optimizer.load_state_dict(torch.load('tmp/last_optimizer.pth'))
-        lr_scheduler.load_state_dict(torch.load('tmp/last_scheduler.pth'))
-        scaler.load_state_dict(torch.load('tmp/last_scaler.pth'))
+        model.load_state_dict(torch.load('weights/last_model.pth'))
+        optimizer.load_state_dict(torch.load('weights/last_optimizer.pth'))
+        lr_scheduler.load_state_dict(torch.load('weights/last_scheduler.pth'))
+        scaler.load_state_dict(torch.load('weights/last_scaler.pth'))
         for group, lr in zip(optimizer.param_groups, lr_scheduler._last_lr):
             print('Using last learning rate:', lr)
             group['lr'] = lr
 
-        stats = json.loads(Path('tmp/stats.json').read_text())
+        stats = json.loads(Path('weights/stats.json').read_text())
         last_batch_num = max(map(int, stats.keys()))
         train_losses, val_losses, _, _ = zip(*stats.values())
         train_losses = list(train_losses)
@@ -131,9 +131,9 @@ def main(train_path, val_path, model_path, samples_per_update, checkpoint_every,
                       f'Training loss: {train_losses[-1]:.4f}',
                       f'Validation loss/PSNR/SSIM: {val_loss:.4f} {val_psnr:.4f} {val_ssim:.4f}')
                 stats[batch_count + 1 + last_batch_num] = [train_losses[-1], val_loss, val_psnr, val_ssim]
-                Path('tmp/stats.json').write_text(json.dumps(stats))
+                Path('weights/stats.json').write_text(json.dumps(stats))
 
-                curr_path = f'tmp/model_{save_idx}.pth'
+                curr_path = f'weights/model_{save_idx}.pth'
                 if val_loss < best_val_loss:
                     print(f'Best validation loss found -> saving the model to {curr_path}')
                     best_val_loss = val_loss
@@ -145,10 +145,10 @@ def main(train_path, val_path, model_path, samples_per_update, checkpoint_every,
 
             save_idx += 1
 
-    torch.save(model.state_dict(), 'tmp/last_model.pth')
-    torch.save(optimizer.state_dict(), 'tmp/last_optimizer.pth')
-    torch.save(lr_scheduler.state_dict(), 'tmp/last_scheduler.pth')
-    torch.save(scaler.state_dict(), 'tmp/last_scaler.pth')
+    torch.save(model.state_dict(), 'weights/last_model.pth')
+    torch.save(optimizer.state_dict(), 'weights/last_optimizer.pth')
+    torch.save(lr_scheduler.state_dict(), 'weights/last_scheduler.pth')
+    torch.save(scaler.state_dict(), 'weights/last_scaler.pth')
 
     end_timer_and_print(f'Finished training for {num_batches} batches with batch size {batch_size}')
 
