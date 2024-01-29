@@ -164,7 +164,7 @@ if __name__ == "__main__":
     parser.add_argument("--model_path", type=str, default="")
     parser.add_argument("--samples_per_update", type=int, default=16)
     parser.add_argument("--checkpoint_every", type=int, default=200)
-    parser.add_argument('--multi_pass', action=BooleanOptionalAction)
+    parser.add_argument('--multi_pass', action=BooleanOptionalAction, default=False)
     args = parser.parse_args()
 
     main(args.train_path,
