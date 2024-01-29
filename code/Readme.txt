@@ -1,56 +1,43 @@
-File overvie:
+## Test the Model
 
-- env.yml:	lists the dependencies. To be used with anaconda
+`predict_real_integrals.py` contains the necessary code to test the an existing model.
 
-- ifcnn.py:
-- swinir.py:
-- swin2sr.py:	contain their corresponding models
-		ifcnn has been significantly changed though to allow for easier data handling and more concise code
+### Usage:
+```shell
+python predict_real_integrals.py --input_dir=test --model_path=out/model.pth --output_dir=out
 
-- model.py:	contains a Pytorch Module designed to stitch the fusion and denoising models together
+options:
+  -h, --help            show this help message and exit
+  --input_path 			input path that is either a directory that contains the real integral images (.png) 
+  						or a direct path to a .tiff file to test a focal stack
+  --model_path 			path to the weights of a trained model. e.g. out/model.pth
+  --output_dir			directory where the resulting outputs will be stored to
+```
 
-- Experiments.ipynb:	was/is used for experimenting with and testing different parts of the setup
-			For now it contains a fully functional workflow for loading images and running the model
+## Train the Model
 
-- AOS_integrator_dataset.ipynb:	an adaptation of a notebook from the AOS repository
-				can be used to convert a folder of areal images to a folder/dataset of integral focal stacks
-				must be placed in the AOS\AOS for Drone Swarms\LFR\python folder of the AOS project and run with the corresponding anaconda environment
+`train.py` contains the necessary code to train the model. Note the model can be trained either in single pass or double pass.
+For the difference between these modes please refer to the project report.
+The suggested way is to start training the model with the single pass mode and switch to double pass mode only after training for some time. (e.g. after 50000 batches).
 
-- integrals:	contains a small dataset genereated by AOS_integrator_dataset.ipynb
-		[id]_integrals.tiff 	is a collection of integrals at different focal lengths. All integrals for one sample are stored in a single file, hopefully speeding up load times
-		[id]_gt.png 		is a copy of the corresponding ground thruth image
-		missing.txt 		lists all samples for which too few files were present
+### Usage:
+```shell
+usage: train.py [-h] [--train_path TRAIN_PATH] [--val_path VAL_PATH] [--model_path MODEL_PATH] [--samples_per_update SAMPLES_PER_UPDATE] [--checkpoint_every CHECKPOINT_EVERY] [--multi_pass | --no-multi_pass]
 
-- dataset.py:	a pytroch dataset class to load generated integral stacks and prepare them for the model
+Training interface for SwinSR
 
-- snapshots:	this folder has been used so far to store pretrained weights for ifcnn and swinir
-		their size prevents the gihub upload, but as these pretrained weights are not useful for our usecase, it's likely not necessary to download the yourself
-		if you'd still like to, they can be found here:
-		https://github.com/uzeful/IFCNN/blob/master/Code/snapshots/IFCNN-MAX.pth
-		https://github.com/JingyunLiang/SwinIR/releases/download/v0.0/004_grayDN_DFWB_s128w8_SwinIR-M_noise15.pth
+options:
+  -h, --help            					show this help message and exit
+  --train_path TRAIN_PATH					path to the directory that contains training data (.tiff) files. default: train/
+  --val_path VAL_PATH						path to the directory that contains validation data (.tiff) files. default: val/
+  --model_path MODEL_PATH					path to the weights of a trained model. e.g. out/model.pth.
+  --samples_per_update SAMPLES_PER_UPDATE	the number of samples that needs to be used for a single update. default: 16
+  --checkpoint_every CHECKPOINT_EVERY		number of samples between every checkpoint. e.g. calculating validation loss, saving the model, etc. default: 200
+  --multi_pass, --no-multi_pass				boolean flag to select the training mode. if --multi_pass is specified the model is trained with double path, otherwise single pass.
+```
 
-- lytro:	contains a sample with two images from the ifcnn repository
-		only used for initial ideas presentation to have data similar to the training dataset for pretrained weights
-		can likely be removed soon
-
-
-Model Considerations:
-
-IFCNN as described in it's paper uses pretrained resnet weights for it's first layer.
-This forces them to use 3 channels for grayscale images, just repeating them along the axis.
-It probably also forces us to do specific input handling, e.g normalization, which need to be looked into (TODO)
-
-IFCNN's output also has 3 channels, which are converted to grayscale using PIL if needed.
-SwinIR can be customized in how many channels it uses and what value range the image has ([0,1] or [0,255]).
-For the first demonstration using pretrained weights, a derivable version of PIL's grayscale conversion was implemented and used.
-The resulting "channel flow" was therefore: 3 > IFCNN > 3 > conversion > 1 > SwinIR > 1
-However, there may be better ways to do this. Here are some ideas:
-- Because pretrained resnet weights may not be useful here, we could go completely grayscale, with 1 channel everywhere and no need for conversion (could make training harder)
-- replace the imitated PIL conversion with a per pixel Conv layer (i.e. (1,1) kernel) or adjust the final IFCNN layer for the same effect
-- use 3 channels throughout, removing the need for conversion in the middle, only converting at the end (would make training harder due to more weights)
-
-General Notes:
-
-Much of this is simply bodged together to get the model working for the initial presentation.
-Therefore, please look into and adjust the code and parameters as we move away from these pretrained weights.
-Don't just trust the initial implementation to have done everything correctly!
+#### Example Usage:
+```shell
+python train.py --train_path train --val_path val --checkpoint_every 200 --samples_per_update 16 --no-multi_pass
+python train.py --train_path train --val_path val --model_path tmp/model.pth --checkpoint_every 200 --samples_per_update 16 --multi_pass
+```
