@@ -4,14 +4,19 @@
 
 ### Usage:
 ```shell
-python predict_real_integrals.py --input_dir=test --model_path=out/model.pth --output_dir=out
+usage: test.py [-h] [--input_image_path INPUT_IMAGE_PATH] [--folder_datatype FOLDER_DATATYPE] [--model_path MODEL_PATH] [--get_info_every GET_INFO_EVERY] [--output_folder OUTPUT_FOLDER] [--make_plots | --no-make_plots] [--generate_outputs | --no-generate_outputs]
+
+Testing interface for SwinSR
 
 options:
-  -h, --help            show this help message and exit
-  --input_path 			input path that is either a directory that contains the real integral images (.png) 
-  						or a direct path to a .tiff file to test a focal stack
-  --model_path 			path to the weights of a trained model. e.g. out/model.pth
-  --output_dir			directory where the resulting outputs will be stored to
+  -h, --help                                    show this help message and exit
+  --input_image_path INPUT_IMAGE_PATH           can be either a path to a single file or to a directory containing files. default: `test/`
+  --folder_datatype FOLDER_DATATYPE             can be either `tiff` or `png`. default: `tiff`
+  --model_path MODEL_PATH                       path to the weights of a trained model. default: `out/model.pth`.
+  --get_info_every GET_INFO_EVERY               number of iterations that should be done before printing out some results. default: `1000`
+  --output_folder OUTPUT_FOLDER                 directory where the output needs to be stored to. default: `out/`
+  --make_plots, --no-make_plots                 boolean flag to specify if the plots should be created. deafult: `False`
+  --generate_outputs, --no-generate_outputs     boolean flag to specify if the outputs should be created. deafult: `True`
 ```
 
 ## Train the Model
