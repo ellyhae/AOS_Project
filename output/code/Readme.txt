@@ -47,12 +47,12 @@ usage: train.py [-h] [--train_path TRAIN_PATH] [--val_path VAL_PATH] [--model_pa
 Training interface for SwinSR
 
 options:
-  -h, --help            					          show this help message and exit
-  --train_path TRAIN_PATH					          path to the directory that contains training data (.tiff) files. default: train/
-  --val_path VAL_PATH						            path to the directory that contains validation data (.tiff) files. default: val/
-  --model_path MODEL_PATH					          path to the weights of a trained model. e.g. weights/model.pth.
-  --samples_per_update SAMPLES_PER_UPDATE	  the number of samples that needs to be used for a single update. default: 16
-  --checkpoint_every CHECKPOINT_EVERY		    number of samples between every checkpoint. e.g. calculating validation loss, saving the model, etc. default: 200
+  -h, --help            					      show this help message and exit
+  --train_path TRAIN_PATH					      path to the directory that contains training data (.tiff) files. default: train/
+  --val_path VAL_PATH						      path to the directory that contains validation data (.tiff) files. default: val/
+  --model_path MODEL_PATH					      path to the weights of a trained model to continue training. e.g. weights/model.pth.
+  --samples_per_update SAMPLES_PER_UPDATE	      the number of samples that needs to be used for a single update. default: 16
+  --checkpoint_every CHECKPOINT_EVERY		      number of samples between every checkpoint. e.g. calculating validation loss, saving the model, etc. default: 200
   --multi_pass, --no-multi_pass				      boolean flag to select the training mode. if --multi_pass is specified the model is trained with double path, otherwise single pass.
 ```
 
