@@ -11,7 +11,7 @@ from dataset import PositionDataset
 from loss import PositionEnhancedLoss
 from swin2sr import Swin2SR as Swin
 from utils import end_timer_and_print, start_timer
-from validate_2 import validate_dataset
+from validate import validate_dataset
 
 
 def get_batch(data_iterator, train_dl):
