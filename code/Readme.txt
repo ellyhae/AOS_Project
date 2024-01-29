@@ -1,6 +1,6 @@
 ## Test the Model
 
-`predict_real_integrals.py` contains the necessary code to test the an existing model.
+`test.py` contains the necessary code to test the an existing model.
 
 ### Usage:
 ```shell
