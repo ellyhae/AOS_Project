@@ -11,8 +11,8 @@ Testing interface for SwinSR
 options:
   -h, --help                                    show this help message and exit
   --input_image_path INPUT_IMAGE_PATH           can be either a path to a single file or to a directory containing files. default: `test/`
-  --folder_datatype FOLDER_DATATYPE             can be either `tiff` or `png`. default: `tiff`
-  --model_path MODEL_PATH                       path to the weights of a trained model. default: `out/model.pth`.
+  --folder_datatype FOLDER_DATATYPE             only used when INPUT_IMAGE_PATH is a folder to find appropriate input files. can be either `tiff` or `png`. default: `tiff`
+  --model_path MODEL_PATH                       path to the weights of a trained model. default: `weights/model.pth`.
   --get_info_every GET_INFO_EVERY               number of iterations that should be done before printing out some results. default: `1000`
   --output_folder OUTPUT_FOLDER                 directory where the output needs to be stored to. default: `out/`
   --make_plots, --no-make_plots                 boolean flag to specify if the plots should be created. deafult: `False`
@@ -32,13 +32,13 @@ usage: train.py [-h] [--train_path TRAIN_PATH] [--val_path VAL_PATH] [--model_pa
 Training interface for SwinSR
 
 options:
-  -h, --help            					show this help message and exit
-  --train_path TRAIN_PATH					path to the directory that contains training data (.tiff) files. default: train/
-  --val_path VAL_PATH						path to the directory that contains validation data (.tiff) files. default: val/
-  --model_path MODEL_PATH					path to the weights of a trained model. e.g. out/model.pth.
-  --samples_per_update SAMPLES_PER_UPDATE	the number of samples that needs to be used for a single update. default: 16
-  --checkpoint_every CHECKPOINT_EVERY		number of samples between every checkpoint. e.g. calculating validation loss, saving the model, etc. default: 200
-  --multi_pass, --no-multi_pass				boolean flag to select the training mode. if --multi_pass is specified the model is trained with double path, otherwise single pass.
+  -h, --help            					          show this help message and exit
+  --train_path TRAIN_PATH					          path to the directory that contains training data (.tiff) files. default: train/
+  --val_path VAL_PATH						            path to the directory that contains validation data (.tiff) files. default: val/
+  --model_path MODEL_PATH					          path to the weights of a trained model. e.g. weights/model.pth.
+  --samples_per_update SAMPLES_PER_UPDATE	  the number of samples that needs to be used for a single update. default: 16
+  --checkpoint_every CHECKPOINT_EVERY		    number of samples between every checkpoint. e.g. calculating validation loss, saving the model, etc. default: 200
+  --multi_pass, --no-multi_pass				      boolean flag to select the training mode. if --multi_pass is specified the model is trained with double path, otherwise single pass.
 ```
 
 #### Example Usage:
