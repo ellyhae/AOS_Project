@@ -1,3 +1,8 @@
+The test dataset and the corresponding results can be found at https://drive.google.com/drive/folders/1GFJHBnnnYQ3LdUQ7VV5aeKVb9sJfR5Wi?usp=sharing
+
+Please note that we only use integrals at focal height 0m, so the results for any focal heights other than this will likely be worse.
+Despite this, we used our model on all provided real integrals, no matter the height, and stored the results at "results/real_integrals", just to see what would happen.
+
 ## Test the Model
 
 `test.py` contains the necessary code to test the an existing model.
@@ -18,6 +23,16 @@ options:
   --make_plots, --no-make_plots                 boolean flag to specify if the plots should be created. deafult: `False`
   --generate_outputs, --no-generate_outputs     boolean flag to specify if the outputs should be created. deafult: `True`
 ```
+#### Example Usage:
+```shell
+python test.py --input_image_path test
+python test.py --input_image_path file.png
+python test.py --input_image_path real_integrals --folder_datatype png --output_folder real_results
+```
+
+The first command computes the results for the test dataset and stores the predictions in the folder "out". As the test dataset contains ground truth images, the script will also compute metrics such as the loss.
+The second command would compute the prediction for a single input integral and store it in the folder "out". Note that file.png should be replaced with the path to some input file.
+The third command would compute the prediction for all png files in the folder "real_integrals" and store the results in the folder "real_results".
 
 ## Train the Model
 
