@@ -1,5 +1,5 @@
 import json
-from argparse import ArgumentParser
+from argparse import ArgumentParser, BooleanOptionalAction
 from pathlib import Path
 
 import numpy as np
@@ -24,7 +24,7 @@ def get_batch(data_iterator, train_dl):
     return data_iterator, stack.cuda(non_blocking=True), gt.cuda(non_blocking=True), pos.cuda(non_blocking=True)
 
 
-def main(train_path, val_path, model_path, samples_per_update, checkpoint_every):
+def main(train_path, val_path, model_path, samples_per_update, checkpoint_every, multi_pass):
     torch.backends.cudnn.benchmark = True
     torch.manual_seed(43)
     np.random.seed(43)
@@ -110,8 +110,8 @@ def main(train_path, val_path, model_path, samples_per_update, checkpoint_every)
                 loss = loss_fn(denoised, gt, pos)
             else:
                 loss_fn(model(denoised), gt, pos)
-            if model_path:
-                single_pass = not single_pass  # toggle switch if model is finetuned
+            if multi_pass:
+                single_pass = not single_pass  # toggle switch if multi-pass finetuning is enabled
             acc_loss = loss / accumulate_batches
             scaler.scale(acc_loss).backward(retain_graph=True)  # scale loss and calculate gradients
 
@@ -164,6 +164,12 @@ if __name__ == "__main__":
     parser.add_argument("--model_path", type=str, default="")
     parser.add_argument("--samples_per_update", type=int, default=16)
     parser.add_argument("--checkpoint_every", type=int, default=200)
+    parser.add_argument('--multi_pass', action=BooleanOptionalAction)
     args = parser.parse_args()
 
-    main(args.train_path, args.val_path, args.model_path, args.samples_per_update, args.checkpoint_every)
+    main(args.train_path,
+         args.val_path,
+         args.model_path,
+         args.samples_per_update,
+         args.checkpoint_every,
+         args.multi_pass)
