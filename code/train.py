@@ -100,18 +100,14 @@ def main(train_path, val_path, model_path, samples_per_update, checkpoint_every,
     start_timer()
 
     loop = trange(num_batches)
-    single_pass = True
     save_idx = 0
 
     for batch_count in loop:
         with torch.autocast(device_type='cuda', dtype=torch.float16):
             denoised = model(stack)
-            if single_pass:
-                loss = loss_fn(denoised, gt, pos)
-            else:
-                loss_fn(model(denoised), gt, pos)
-            if multi_pass:
-                single_pass = not single_pass  # toggle switch if multi-pass finetuning is enabled
+            if multi_pass and (batch_count + 1) % 2 == 0:
+                denoised = model(denoised)
+            loss = loss_fn(denoised, gt, pos)
             acc_loss = loss / accumulate_batches
             scaler.scale(acc_loss).backward(retain_graph=True)  # scale loss and calculate gradients
 
