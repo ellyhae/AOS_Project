@@ -1,4 +1,4 @@
-The test dataset and the corresponding results can be found at https://drive.google.com/drive/folders/1GFJHBnnnYQ3LdUQ7VV5aeKVb9sJfR5Wi?usp=sharing
+The model weights, test dataset and the corresponding results can be found at https://drive.google.com/drive/folders/1GFJHBnnnYQ3LdUQ7VV5aeKVb9sJfR5Wi?usp=sharing
 
 Please note that we only use integrals at focal height 0m, so the results for any focal heights other than this will likely be worse.
 Despite this, we used our model on all provided real integrals, no matter the height, and stored the results at "results/real_integrals", just to see what would happen.
